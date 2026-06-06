@@ -1,0 +1,80 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Gym {
+  id              String   @id @default(uuid())
+  name            String
+  branding_config Json     @default("{}")
+  created_at      DateTime @default(now())
+
+  users           User[]
+}
+
+model User {
+  id            String   @id @default(uuid())
+  gym_id        String
+  gym           Gym      @relation(fields: [gym_id], references: [id], onDelete: Cascade)
+  role          String   // 'superadmin', 'admin', 'trainer', 'member'
+  email         String   @unique
+  password_hash String?
+  created_at    DateTime @default(now())
+
+  profile       UserProfile?
+  diet_plans    DietPlan[]
+  audit_logs    AuditLog[]
+}
+
+model UserProfile {
+  user_id           String   @id
+  user              User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  age               Int?
+  gender            String?
+  height_cm         Decimal?
+  weight_kg         Decimal?
+  body_fat_pct      Decimal?
+  activity_level    String?
+  goals             Json?
+  dietary_prefs     Json?
+  health_conditions Json?
+  updated_at        DateTime @default(now())
+}
+
+model DietPlan {
+  id                  String   @id @default(uuid())
+  user_id             String
+  user                User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  status              String   // 'queued', 'generating', 'reviewing', 'optimizing', 'completed', 'failed'
+  total_calories      Int?
+  macros              Json?
+  ai_confidence_score Decimal?
+  created_at          DateTime @default(now())
+
+  ai_reports          AIReviewReport[]
+}
+
+model AIReviewReport {
+  id                    String   @id @default(uuid())
+  plan_id               String
+  plan                  DietPlan @relation(fields: [plan_id], references: [id], onDelete: Cascade)
+  reviewer_notes        String?
+  flags_raised          Json?
+  optimizations_applied Json?
+  created_at            DateTime @default(now())
+}
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  user_id     String
+  user        User     @relation(fields: [user_id], references: [id])
+  action      String
+  entity_type String
+  entity_id   String
+  changes     Json?
+  created_at  DateTime @default(now())
+}

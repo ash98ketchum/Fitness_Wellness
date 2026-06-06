@@ -1,0 +1,100 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Gym {
+  id             String   @id @default(uuid())
+  name           String
+  brandingColor  String?  @default("#000000")
+  logoUrl        String?
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  users          User[]
+}
+
+model User {
+  id               String   @id @default(uuid())
+  name             String
+  email            String   @unique
+  passwordHash     String
+  role             String   @default("MEMBER")
+  gymId            String?
+  gym              Gym?     @relation(fields: [gymId], references: [id])
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  
+  onboardingProfile OnboardingProfile?
+  dietPlans         DietPlan[]
+}
+
+model OnboardingProfile {
+  id               String   @id @default(uuid())
+  userId           String   @unique
+  user             User     @relation(fields: [userId], references: [id])
+  
+  personalInfo     String   // JSON stored as text for SQLite
+  fitnessGoals     String
+  lifestyle        String
+  healthData       String
+  foodPreferences  String
+  
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model DietPlan {
+  id                String   @id @default(uuid())
+  userId            String
+  user              User     @relation(fields: [userId], references: [id])
+  status            String   @default("GENERATING")
+  
+  totalCalories     Int?
+  proteinG          Int?
+  carbsG            Int?
+  fatsG             Int?
+  
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  meals             Meal[]
+  verificationReport VerificationReport?
+}
+
+model Meal {
+  id                String   @id @default(uuid())
+  dietPlanId        String
+  dietPlan          DietPlan @relation(fields: [dietPlanId], references: [id])
+  
+  name              String
+  description       String?
+  time              String?
+  
+  calories          Int
+  macros            String   // JSON as text
+  ingredients       String   // JSON as text
+  
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+model VerificationReport {
+  id                String   @id @default(uuid())
+  dietPlanId        String   @unique
+  dietPlan          DietPlan @relation(fields: [dietPlanId], references: [id])
+  
+  confidenceScore   Int
+  issuesFound       String   // JSON as text
+  correctionsApplied String  // JSON as text
+  
+  agent1Raw         String?
+  agent2Raw         String?
+  agent3Raw         String?
+  
+  createdAt         DateTime @default(now())
+}

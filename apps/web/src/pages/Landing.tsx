@@ -1,7 +1,8 @@
 import { motion } from 'framer-motion';
 import { Button } from '../components/ui/Button';
-import { ArrowRight, Activity, Cpu, ShieldCheck, Star } from 'lucide-react';
+import { ArrowRight, Activity, Cpu, ShieldCheck, Star, CheckCircle2, Plus, Minus } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useState } from 'react';
 
 const testimonials = [
   { name: "James Hartley", role: "Owner, Iron Republic Gym", text: "LuminaFit replaced our entire nutrition coaching workflow. Members love the AI plans." },
@@ -19,8 +20,16 @@ const stats = [
   { value: "<30s", label: "Generation Time" },
 ];
 
+const faqs = [
+  { question: "How does the AI optimize my macros?", answer: "Our multi-agent pipeline factors in your exact body weight, body fat percentage, activity level, and goals to create a mathematically perfect macro split. It constantly re-evaluates as you progress." },
+  { question: "Can I swap meals if I don't like something?", answer: "Yes. Our Adaptive Meal Engine allows you to drag-and-drop meals, or simply tell the AI Coach 'I don't like eggs', and it will instantly recalculate a new meal that fits your daily macros perfectly." },
+  { question: "What if I go off plan?", answer: "No problem. Just tell the AI what you ate (e.g., 'I had 3 slices of pizza'). The Adaptive Engine will automatically rebalance your remaining meals for the day or week to keep you on track." },
+  { question: "Is my data private and secure?", answer: "Absolutely. We employ enterprise-grade encryption for all user data. Your health information is strictly confidential and never shared with third parties." },
+];
+
 export default function Landing() {
   const navigate = useNavigate();
+  const [openFaq, setOpenFaq] = useState<number | null>(null);
 
   return (
     <div className="min-h-screen bg-black text-white selection:bg-zinc-800 selection:text-white flex flex-col">
@@ -147,6 +156,90 @@ export default function Landing() {
             </div>
           </div>
         </div>
+
+        {/* Pricing */}
+        <motion.div
+          initial={{ opacity: 0, y: 40 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, margin: "-100px" }}
+          transition={{ duration: 0.8 }}
+          className="mt-32 w-full max-w-5xl mx-auto z-10"
+        >
+          <div className="text-center mb-16">
+            <h2 className="text-3xl md:text-5xl font-semibold tracking-tighter mb-4">Simple, transparent pricing.</h2>
+            <p className="text-zinc-400 text-lg">Start for free, upgrade when you need more power.</p>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto">
+            {/* Free Tier */}
+            <div className="p-8 rounded-3xl border border-zinc-800 bg-zinc-950/50 backdrop-blur-sm flex flex-col">
+              <h3 className="text-2xl font-semibold mb-2">Basic</h3>
+              <p className="text-zinc-400 mb-6">Perfect for individuals starting their fitness journey.</p>
+              <div className="text-4xl font-bold tracking-tight mb-8">Free</div>
+              <ul className="space-y-4 mb-8 flex-1">
+                {['Basic AI meal generation', 'Standard macro tracking', 'Weekly progress review', 'Community support'].map(feature => (
+                  <li key={feature} className="flex items-center gap-3 text-zinc-300">
+                    <CheckCircle2 size={18} className="text-emerald-500" />
+                    <span>{feature}</span>
+                  </li>
+                ))}
+              </ul>
+              <Button variant="outline" className="w-full" onClick={() => navigate('/signup')}>Get Started Free</Button>
+            </div>
+
+            {/* Pro Tier */}
+            <div className="p-8 rounded-3xl border border-zinc-700 bg-zinc-900/80 backdrop-blur-sm flex flex-col relative overflow-hidden">
+              <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-emerald-500 to-indigo-500" />
+              <div className="absolute top-4 right-4 px-3 py-1 text-xs font-medium bg-white text-black rounded-full">Most Popular</div>
+              <h3 className="text-2xl font-semibold mb-2 text-white">Pro</h3>
+              <p className="text-zinc-400 mb-6">For those who want full control and adaptive AI coaching.</p>
+              <div className="text-4xl font-bold tracking-tight mb-2 text-white">$19<span className="text-lg text-zinc-500 font-normal">/mo</span></div>
+              <p className="text-sm text-zinc-500 mb-8">Billed annually at $228</p>
+              <ul className="space-y-4 mb-8 flex-1">
+                {['Adaptive Meal Engine', 'Voice Cooking Assistant', 'Unlimited meal recalculations', 'Downloadable Expert Reports', 'Priority 24/7 AI Coach'].map(feature => (
+                  <li key={feature} className="flex items-center gap-3 text-white">
+                    <CheckCircle2 size={18} className="text-emerald-500" />
+                    <span>{feature}</span>
+                  </li>
+                ))}
+              </ul>
+              <Button className="w-full bg-white text-black hover:bg-zinc-200" onClick={() => navigate('/signup')}>Upgrade to Pro</Button>
+            </div>
+          </div>
+        </motion.div>
+
+        {/* FAQ */}
+        <motion.div
+          initial={{ opacity: 0, y: 40 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, margin: "-100px" }}
+          transition={{ duration: 0.8 }}
+          className="mt-32 mb-24 w-full max-w-3xl mx-auto z-10"
+        >
+          <h2 className="text-3xl font-semibold tracking-tight text-center mb-12">Frequently Asked Questions</h2>
+          <div className="space-y-4">
+            {faqs.map((faq, i) => (
+              <div key={i} className="border border-zinc-800 rounded-2xl overflow-hidden bg-zinc-950/30">
+                <button
+                  className="w-full flex items-center justify-between p-6 text-left cursor-pointer hover:bg-zinc-900/50 transition-colors"
+                  onClick={() => setOpenFaq(openFaq === i ? null : i)}
+                >
+                  <span className="font-medium text-lg">{faq.question}</span>
+                  {openFaq === i ? <Minus size={20} className="text-zinc-400" /> : <Plus size={20} className="text-zinc-400" />}
+                </button>
+                <motion.div
+                  initial={false}
+                  animate={{ height: openFaq === i ? 'auto' : 0, opacity: openFaq === i ? 1 : 0 }}
+                  className="overflow-hidden"
+                >
+                  <p className="p-6 pt-0 text-zinc-400 leading-relaxed">
+                    {faq.answer}
+                  </p>
+                </motion.div>
+              </div>
+            ))}
+          </div>
+        </motion.div>
       </main>
 
       {/* Footer */}

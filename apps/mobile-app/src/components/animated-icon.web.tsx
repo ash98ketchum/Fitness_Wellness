@@ -25,6 +25,7 @@ const keyframe = new Keyframe({
 
 const logoKeyframe = new Keyframe({
   0: {
+    transform: [{ scale: 0 }],
     opacity: 0,
   },
   60: {
@@ -50,7 +51,8 @@ const glowKeyframe = new Keyframe({
     easing: Easing.elastic(0.7),
   },
   100: {
-    transform: [{ rotateZ: '7200deg' }],
+    transform: [{ rotateZ: '7200deg' }, { scale: 1 }],
+    opacity: 1,
   },
 });
 

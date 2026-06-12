@@ -63,8 +63,8 @@ export default function Onboarding() {
     if (currentStep < steps.length - 1) {
       setCurrentStep(s => s + 1);
     } else {
-      // Navigate to generating, passing form data
-      navigate('/generating', { state: { formData } });
+      // Navigate to loading, passing form data
+      navigate('/loading', { state: { formData } });
     }
   };
 

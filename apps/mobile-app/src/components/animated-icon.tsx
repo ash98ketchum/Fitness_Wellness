@@ -18,15 +18,17 @@ export function AnimatedSplashOverlay() {
       opacity: 1,
     },
     20: {
+      transform: [{ scale: INITIAL_SCALE_FACTOR }],
       opacity: 1,
     },
     70: {
+      transform: [{ scale: 1 }],
       opacity: 0,
       easing: Easing.elastic(0.7),
     },
     100: {
-      opacity: 0,
       transform: [{ scale: 1 }],
+      opacity: 0,
       easing: Easing.elastic(0.7),
     },
   });

@@ -5,5 +5,8 @@
   "workspaces": [
     "apps/*",
     "packages/*"
-  ]
+  ],
+  "devDependencies": {
+    "ajv": "^8.20.0"
+  }
 }

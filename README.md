@@ -2,7 +2,7 @@
 
 LuminaFit is a venture-backed B2B SaaS platform designed to generate highly personalized, hyper-optimized diet plans for gym chains, personal trainers, and clinical nutritionists. 
 
-It leverages a powerful **multi-agent AI pipeline** powered by LLaMA 3.3 70B (via Groq) to analyze a user's biology, fitness goals, and lifestyle, producing macro-perfect nutrition protocols.
+It leverages a powerful **multi-agent AI pipeline** to analyze a user's biology, fitness goals, and lifestyle, producing macro-perfect nutrition protocols.
 
 ## 🚀 Key Features
 
@@ -10,26 +10,28 @@ It leverages a powerful **multi-agent AI pipeline** powered by LLaMA 3.3 70B (vi
   - *Agent 1 (Generator)*: Drafts the initial protocol based on 20+ onboarding data points.
   - *Agent 2 (Reviewer)*: QA checks the math and verifies zero allergen violations.
   - *Agent 3 (Optimizer)*: Applies corrections and provides a personalized clinical insight.
-- **High-Concurrency Ready**: Implements backend round-robin API key rotation using 3 different Groq API keys to easily handle 100+ requests per second without rate-limiting.
-- **Clinical Expert Report**: A dedicated, readable `/expert-report` UI designed for dieticians to visually inspect the exact inputs and outputs of the AI Agents, alongside a mathematical confidence score and issue-detection logs.
-- **Personalized Floating Chatbot**: A globally accessible AI Dietician chat widget that has secure, direct access to the user's specific clinical profile and their active diet plan.
-- **Venture-Standard UI/UX**: Dark-mode aesthetic inspired by Micro1, featuring glassmorphism, fluid Framer Motion animations, interactive components, and full mobile responsiveness (including a mobile sidebar drawer).
+- **Cross-Platform Parity**: The application supports both a fully responsive Web Application and an identical Native Mobile Application. 
+- **Voice-Enabled AI Coach**: A globally accessible AI Dietician chat widget that has secure, direct access to the user's specific clinical profile and their active diet plan, complete with Voice-to-Text inputs.
+- **Production-Grade Quality**: The application achieves a premium feel through fluid Framer Motion animations, comprehensive error handling, interactive UI/UX components, and a robust architecture.
+- **Automated E2E Testing**: A comprehensive Playwright End-to-End testing suite ensures the reliability of the core flows (Landing -> Authentication -> Onboarding -> Plan Generation -> Dashboard).
 
 ## 🛠 Tech Stack
 
-The project is structured as a monorepo containing a frontend and a backend API.
+The project is structured as a monorepo containing a web frontend, a mobile frontend, and a backend API.
 
-- **Frontend (`apps/web`)**: React 18, TypeScript, Vite, Tailwind CSS (v3), Framer Motion, React Router, Lucide React.
-- **Backend (`apps/api`)**: Node.js, Express, TypeScript, Prisma ORM, SQLite (local DB), JWT Auth, bcrypt, Groq SDK.
+- **Frontend (`apps/web`)**: React 18, TypeScript, Vite, Tailwind CSS, Framer Motion, React Router, Playwright (E2E).
+- **Mobile (`apps/mobile-app`)**: React Native, Expo Router, NativeWind (Tailwind).
+- **Backend (`apps/api-server`)**: Node.js, Express, JavaScript, Groq API (LLaMA 3).
 
 ## 📁 Monorepo Structure
 
 ```
 Fitness_Wellness/
 ├── apps/
-│   ├── web/        # Frontend React application (Port 5173)
-│   └── api/        # Backend Express server & Prisma (Port 3000)
-├── package.json    # Root configuration
+│   ├── web/           # Frontend React application (Port 5173)
+│   ├── mobile-app/    # React Native Expo application
+│   └── api-server/    # Backend Express server for AI Engine (Port 3000)
+├── package.json       # Root configuration
 └── README.md
 ```
 
@@ -37,49 +39,34 @@ Fitness_Wellness/
 
 ### Prerequisites
 - Node.js (v18 or higher)
-- Groq API Keys (Configured in `apps/api/.env`)
+- Groq API Key (Configured in `apps/api-server/.env`)
+- Playwright (For E2E Testing)
 
-### 1. Backend Setup (API)
+### 1. Backend Setup (`apps/api-server`)
 
 Navigate to the backend directory:
 ```bash
-cd apps/api
-```
-
-Install dependencies:
-```bash
+cd apps/api-server
 npm install
 ```
 
-Configure Environment Variables (`apps/api/.env`):
+Configure Environment Variables (`apps/api-server/.env`):
 ```env
-DATABASE_URL="file:./dev.db"
-JWT_SECRET="your-secret"
-GROQ_API_KEY_1="your-key-1"
-GROQ_API_KEY_2="your-key-2"
-GROQ_API_KEY_3="your-key-3"
-```
-
-Run database migrations:
-```bash
-npx prisma migrate dev
+GROQ_API_KEY="your-groq-api-key"
+PORT=3000
 ```
 
 Start the Express development server:
 ```bash
-npm run dev
+npm start
 ```
 *The API will run locally on `http://localhost:3000`.*
 
-### 2. Frontend Setup (Web)
+### 2. Frontend Setup (`apps/web`)
 
 Navigate to the frontend directory:
 ```bash
 cd apps/web
-```
-
-Install dependencies:
-```bash
 npm install
 ```
 
@@ -88,3 +75,25 @@ Start the Vite development server:
 npm run dev
 ```
 *The Web App will run locally on `http://localhost:5173`.*
+
+### 3. Mobile Setup (`apps/mobile-app`)
+
+Navigate to the mobile directory:
+```bash
+cd apps/mobile-app
+npm install
+```
+
+Start the Expo development server:
+```bash
+npx expo start
+```
+
+### 4. Running E2E Tests (Playwright)
+
+With both the API Server and Web Server running:
+```bash
+cd apps/web
+npx playwright test
+```
+*Screenshots of the run are automatically captured in `apps/web/tests/screenshots/`.*

@@ -4,7 +4,7 @@ import dotenv from 'dotenv';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { PrismaClient } from '@prisma/client';
-import { generateDietPlan, chatWithDietician } from './groq';
+import { generateDietPlan, chatWithDietician, chatWithCookingAssistant } from './groq';
 
 dotenv.config();
 
@@ -195,6 +195,10 @@ app.post('/api/v1/plans/generate', authMiddleware, async (req: AuthRequest, res:
           calories: meal.calories,
           macros: JSON.stringify(meal.macros),
           ingredients: JSON.stringify(meal.ingredients),
+          prepTime: meal.prepTime,
+          difficulty: meal.difficulty,
+          portionSizes: JSON.stringify(meal.portionSizes || {}),
+          recipeSteps: JSON.stringify(meal.recipeSteps || []),
         },
       });
     }
@@ -254,6 +258,8 @@ app.get('/api/v1/plans/latest', authMiddleware, async (req: AuthRequest, res: Re
       ...m,
       macros: JSON.parse(m.macros),
       ingredients: JSON.parse(m.ingredients),
+      portionSizes: m.portionSizes ? JSON.parse(m.portionSizes) : {},
+      recipeSteps: m.recipeSteps ? JSON.parse(m.recipeSteps) : [],
     }));
 
     const verificationReport = plan.verificationReport ? {
@@ -271,6 +277,35 @@ app.get('/api/v1/plans/latest', authMiddleware, async (req: AuthRequest, res: Re
     });
   } catch (err) {
     console.error('Fetch plan error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ─── Meals: Get Single Meal ───────────────────
+app.get('/api/v1/meals/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const mealId = req.params.id as string;
+    const meal = await prisma.meal.findUnique({
+      where: { id: mealId },
+      include: { dietPlan: true }
+    }) as any;
+
+    if (!meal || meal.dietPlan.userId !== req.userId) {
+      res.status(404).json({ error: 'Meal not found' });
+      return;
+    }
+
+    res.json({
+      meal: {
+        ...meal,
+        macros: JSON.parse(meal.macros),
+        ingredients: JSON.parse(meal.ingredients),
+        portionSizes: meal.portionSizes ? JSON.parse(meal.portionSizes) : {},
+        recipeSteps: meal.recipeSteps ? JSON.parse(meal.recipeSteps) : [],
+      }
+    });
+  } catch (err) {
+    console.error('Fetch meal error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -322,6 +357,132 @@ app.post('/api/v1/chat', authMiddleware, async (req: AuthRequest, res: Response)
     res.json({ reply });
   } catch (err) {
     console.error('Chat error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ─── Cooking Assistant ────────────────────────
+app.post('/api/v1/agents/cooking', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.userId!;
+    const { messages, mealId } = req.body;
+
+    if (!messages || !Array.isArray(messages) || !mealId) {
+      res.status(400).json({ error: 'Messages array and mealId are required' });
+      return;
+    }
+
+    const meal = await prisma.meal.findUnique({
+      where: { id: mealId },
+    });
+
+    if (!meal) {
+      res.status(404).json({ error: 'Meal not found' });
+      return;
+    }
+
+    const profile = await prisma.onboardingProfile.findUnique({ where: { userId } });
+    let profileData: any = {};
+    if (profile) {
+      const p = JSON.parse(profile.personalInfo);
+      const g = JSON.parse(profile.fitnessGoals);
+      const f = JSON.parse(profile.foodPreferences);
+      const l = JSON.parse(profile.lifestyle);
+      const h = JSON.parse(profile.healthData);
+      profileData = { ...p, ...g, ...f, ...l, ...h };
+    }
+
+    const mealData = {
+      name: meal.name,
+      time: meal.time,
+      calories: meal.calories,
+      macros: JSON.parse(meal.macros),
+      ingredients: JSON.parse(meal.ingredients),
+      description: meal.description,
+      prepTime: meal.prepTime,
+      difficulty: meal.difficulty,
+      portionSizes: meal.portionSizes ? JSON.parse(meal.portionSizes) : {},
+      recipeSteps: meal.recipeSteps ? JSON.parse(meal.recipeSteps) : [],
+    };
+
+    const reply = await chatWithCookingAssistant(messages, mealData, profileData);
+    res.json({ reply });
+  } catch (err) {
+    console.error('Cooking Chat error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ─── Goal Tracker: Progress ─────────────────
+app.get('/api/v1/progress/today', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.userId!;
+    const date = new Date().toISOString().split('T')[0];
+
+    let progress = await prisma.dailyProgress.findUnique({
+      where: { userId_date: { userId, date } }
+    });
+
+    if (!progress) {
+      // Find active diet plan total calories
+      const plan = await prisma.dietPlan.findFirst({
+        where: { userId, status: 'READY' },
+        orderBy: { createdAt: 'desc' },
+      });
+      const targetCalories = plan?.totalCalories || 2000;
+      progress = await prisma.dailyProgress.create({
+        data: { userId, date, caloriesConsumed: 0, caloriesRemaining: targetCalories }
+      });
+    }
+
+    // Get today's logs
+    const mealLogs = await prisma.mealLog.findMany({
+      where: { userId, createdAt: { gte: new Date(date) } },
+      include: { meal: true }
+    });
+
+    res.json({ progress, mealLogs });
+  } catch (err) {
+    console.error('Progress error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+app.post('/api/v1/progress/log', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.userId!;
+    const { mealId } = req.body;
+    const date = new Date().toISOString().split('T')[0];
+
+    const meal = await prisma.meal.findUnique({ where: { id: mealId } });
+    if (!meal) {
+      res.status(404).json({ error: 'Meal not found' });
+      return;
+    }
+
+    // Create log
+    const log = await prisma.mealLog.create({
+      data: { userId, mealId, status: 'COMPLETED' }
+    });
+
+    // Update Daily Progress
+    let progress = await prisma.dailyProgress.findUnique({
+      where: { userId_date: { userId, date } }
+    });
+
+    if (progress) {
+      await prisma.dailyProgress.update({
+        where: { id: progress.id },
+        data: {
+          caloriesConsumed: progress.caloriesConsumed + meal.calories,
+          caloriesRemaining: Math.max(0, progress.caloriesRemaining - meal.calories)
+        }
+      });
+    }
+
+    res.json({ success: true, log });
+  } catch (err) {
+    console.error('Log error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

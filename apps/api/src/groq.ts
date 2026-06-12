@@ -55,6 +55,10 @@ interface GeneratedMeal {
   macros: { protein: number; carbs: number; fats: number };
   ingredients: string[];
   description: string;
+  prepTime: number;
+  difficulty: string;
+  portionSizes: Record<string, string>;
+  recipeSteps: string[];
 }
 
 interface GeneratedPlan {
@@ -155,7 +159,11 @@ Return JSON EXACTLY matching this structure:
       "calories": <number>,
       "macros": { "protein": <number>, "carbs": <number>, "fats": <number> },
       "ingredients": ["ingredient 1", "ingredient 2"],
-      "description": "<brief cooking instruction>"
+      "description": "<brief cooking instruction>",
+      "prepTime": <number in minutes>,
+      "difficulty": "<Easy, Medium, or Hard>",
+      "portionSizes": { "ingredient 1": "100g", "ingredient 2": "1 cup" },
+      "recipeSteps": ["Step 1: Do this", "Step 2: Do that"]
     }
   ]
 }`;
@@ -224,7 +232,11 @@ Return JSON EXACTLY matching this structure:
       "calories": <number>,
       "macros": { "protein": <number>, "carbs": <number>, "fats": <number> },
       "ingredients": ["ingredient 1", "ingredient 2"],
-      "description": "<brief instruction>"
+      "description": "<brief instruction>",
+      "prepTime": <number in minutes>,
+      "difficulty": "<Easy, Medium, or Hard>",
+      "portionSizes": { "ingredient 1": "100g", "ingredient 2": "1 cup" },
+      "recipeSteps": ["Step 1: Do this", "Step 2: Do that"]
     }
   ],
   "correctionsApplied": ["string detailing correction 1"],
@@ -259,6 +271,10 @@ Return JSON EXACTLY matching this structure:
       macros: m.macros || { protein: 30, carbs: 40, fats: 15 },
       ingredients: m.ingredients || [],
       description: m.description || '',
+      prepTime: m.prepTime || 15,
+      difficulty: m.difficulty || 'Easy',
+      portionSizes: m.portionSizes || {},
+      recipeSteps: m.recipeSteps || ['Serve and enjoy.'],
     })),
     confidenceScore: review.confidenceScore || 90,
     issuesFound: review.issuesFound || [],
@@ -278,10 +294,10 @@ function getFallbackPlan(): GeneratedPlan {
     carbsG: 220,
     fatsG: 65,
     meals: [
-      { name: 'High-Protein Oatmeal', time: '08:00 AM', calories: 450, macros: { protein: 30, carbs: 55, fats: 10 }, ingredients: ['Oats', 'Whey protein', 'Banana', 'Almond milk'], description: 'Mix oats with protein powder and top with sliced banana.' },
-      { name: 'Grilled Chicken Salad', time: '12:30 PM', calories: 600, macros: { protein: 50, carbs: 25, fats: 22 }, ingredients: ['Chicken breast', 'Mixed greens', 'Avocado', 'Cherry tomatoes', 'Olive oil'], description: 'Grill chicken and serve over fresh greens.' },
-      { name: 'Greek Yogurt & Berries', time: '03:30 PM', calories: 300, macros: { protein: 25, carbs: 30, fats: 5 }, ingredients: ['Greek yogurt', 'Mixed berries', 'Honey'], description: 'Combine yogurt with berries and a drizzle of honey.' },
-      { name: 'Salmon & Quinoa Bowl', time: '07:00 PM', calories: 750, macros: { protein: 45, carbs: 65, fats: 25 }, ingredients: ['Salmon fillet', 'Quinoa', 'Roasted vegetables', 'Lemon'], description: 'Bake salmon and serve with quinoa and roasted veggies.' },
+      { name: 'High-Protein Oatmeal', time: '08:00 AM', calories: 450, macros: { protein: 30, carbs: 55, fats: 10 }, ingredients: ['Oats', 'Whey protein', 'Banana', 'Almond milk'], description: 'Mix oats with protein powder and top with sliced banana.', prepTime: 5, difficulty: 'Easy', portionSizes: { 'Oats': '50g', 'Whey protein': '1 scoop', 'Banana': '1 medium', 'Almond milk': '200ml' }, recipeSteps: ['Step 1: Heat almond milk.', 'Step 2: Stir in oats and cook for 3 mins.', 'Step 3: Mix in whey protein.', 'Step 4: Top with banana.'] },
+      { name: 'Grilled Chicken Salad', time: '12:30 PM', calories: 600, macros: { protein: 50, carbs: 25, fats: 22 }, ingredients: ['Chicken breast', 'Mixed greens', 'Avocado', 'Cherry tomatoes', 'Olive oil'], description: 'Grill chicken and serve over fresh greens.', prepTime: 15, difficulty: 'Medium', portionSizes: { 'Chicken': '150g', 'Greens': '2 cups', 'Avocado': 'half', 'Tomatoes': '1 cup' }, recipeSteps: ['Step 1: Season and grill chicken.', 'Step 2: Chop veggies.', 'Step 3: Toss all ingredients with olive oil.'] },
+      { name: 'Greek Yogurt & Berries', time: '03:30 PM', calories: 300, macros: { protein: 25, carbs: 30, fats: 5 }, ingredients: ['Greek yogurt', 'Mixed berries', 'Honey'], description: 'Combine yogurt with berries and a drizzle of honey.', prepTime: 2, difficulty: 'Easy', portionSizes: { 'Yogurt': '200g', 'Berries': '1 cup', 'Honey': '1 tbsp' }, recipeSteps: ['Step 1: Scoop yogurt into bowl.', 'Step 2: Top with berries and honey.'] },
+      { name: 'Salmon & Quinoa Bowl', time: '07:00 PM', calories: 750, macros: { protein: 45, carbs: 65, fats: 25 }, ingredients: ['Salmon fillet', 'Quinoa', 'Roasted vegetables', 'Lemon'], description: 'Bake salmon and serve with quinoa and roasted veggies.', prepTime: 25, difficulty: 'Medium', portionSizes: { 'Salmon': '150g', 'Quinoa': '1 cup cooked', 'Veggies': '2 cups' }, recipeSteps: ['Step 1: Bake salmon at 400F for 15 mins.', 'Step 2: Cook quinoa.', 'Step 3: Serve salmon over quinoa with veggies.'] },
     ],
     confidenceScore: 95,
     issuesFound: [],
@@ -328,6 +344,51 @@ ABSOLUTE RULES:
       ],
       temperature: 0.5,
       max_tokens: 500,
+    });
+    return response.choices[0]?.message?.content || "I'm sorry, I couldn't process that request.";
+  } catch (error) {
+    console.error('[Groq Chat Error]:', error);
+    return "I'm currently experiencing high load. Please try again in a moment.";
+  }
+}
+
+export async function chatWithCookingAssistant(
+  messages: { role: 'user' | 'assistant', content: string }[],
+  mealData: Record<string, any>,
+  profileData: Record<string, any>
+): Promise<string> {
+  const profile = buildProfileSummary(profileData);
+  const mealSummary = JSON.stringify(mealData, null, 2);
+
+  const systemPrompt = `You are a Contextual AI Cooking Assistant for a specific meal.
+The user is preparing the following meal:
+${mealSummary}
+
+User Profile (Allergies, preferences, goals):
+${profile}
+
+RULES:
+1. Explain cooking instructions in human-friendly, conversational steps.
+2. If the user asks for an ingredient substitution (e.g. "I don't have almonds" or "Can I use olive oil?"), you MUST structure your answer to categorize options as:
+   - GOOD substitutions
+   - ACCEPTABLE substitutions
+   - BAD substitutions
+   ...along with their nutritional consequences (how it affects calories or macros).
+3. Be highly aware of their allergies and medical conditions. Warn them explicitly and refuse if a substitution they propose is dangerous.
+4. Keep answers conversational and helpful. Do not use markdown headers, just plain text formatting with dashes for bullet points.`;
+
+  if (apiKeys.length === 0) return 'Mock AI: I see your meal! What do you need help with?';
+
+  const client = getGroqClient();
+  try {
+    const response = await client.chat.completions.create({
+      model: MODEL,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        ...messages.map(m => ({ role: m.role as 'user' | 'assistant', content: m.content })),
+      ],
+      temperature: 0.3,
+      max_tokens: 600,
     });
     return response.choices[0]?.message?.content || "I'm sorry, I couldn't process that request.";
   } catch (error) {

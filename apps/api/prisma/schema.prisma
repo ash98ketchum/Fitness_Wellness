@@ -31,6 +31,10 @@ model User {
   
   onboardingProfile OnboardingProfile?
   dietPlans         DietPlan[]
+  longTermGoal      LongTermGoal?
+  dailyProgresses   DailyProgress[]
+  mealLogs          MealLog[]
+  userMemory        UserMemory?
 }
 
 model OnboardingProfile {
@@ -79,8 +83,15 @@ model Meal {
   macros            String   // JSON as text
   ingredients       String   // JSON as text
   
+  prepTime          Int?     // in minutes
+  difficulty        String?  // e.g. "Easy", "Medium", "Hard"
+  portionSizes      String?  // JSON as text
+  recipeSteps       String?  // JSON as text
+  
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
+  
+  mealLogs          MealLog[]
 }
 
 model VerificationReport {
@@ -97,4 +108,61 @@ model VerificationReport {
   agent3Raw         String?
   
   createdAt         DateTime @default(now())
+}
+
+model LongTermGoal {
+  id               String   @id @default(uuid())
+  userId           String   @unique
+  user             User     @relation(fields: [userId], references: [id])
+  
+  targetWeight     Float?
+  currentWeight    Float?
+  goalDate         DateTime?
+  
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model DailyProgress {
+  id               String   @id @default(uuid())
+  userId           String
+  user             User     @relation(fields: [userId], references: [id])
+  date             String   // Storing as YYYY-MM-DD for easy querying in SQLite
+  
+  caloriesConsumed Int      @default(0)
+  caloriesRemaining Int     @default(0)
+  
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  
+  @@unique([userId, date])
+}
+
+model MealLog {
+  id               String   @id @default(uuid())
+  userId           String
+  user             User     @relation(fields: [userId], references: [id])
+  
+  mealId           String?
+  meal             Meal?    @relation(fields: [mealId], references: [id])
+  
+  status           String   @default("COMPLETED") // COMPLETED, SKIPPED, DEVIATED
+  deviationNotes   String?  // e.g. "I ate ice cream at 11 PM"
+  
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model UserMemory {
+  id               String   @id @default(uuid())
+  userId           String   @unique
+  user             User     @relation(fields: [userId], references: [id])
+  
+  favoriteFoods    String?  // JSON as text
+  dislikes         String?  // JSON as text
+  sicknessMode     Boolean  @default(false)
+  sicknessNotes    String?  
+  
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 }

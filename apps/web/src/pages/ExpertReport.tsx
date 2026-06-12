@@ -1,16 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { Card } from '../components/ui/Card';
-import { Activity, FileJson, ArrowLeft, CheckCircle2, AlertTriangle, Lightbulb, ChefHat, Clock, Flame } from 'lucide-react';
+import { Activity, Download, FileText, CheckCircle2, AlertTriangle, ArrowLeft } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
-
-interface OnboardingProfile {
-  personalInfo: string;
-  fitnessGoals: string;
-  lifestyle: string;
-  healthData: string;
-  foodPreferences: string;
-}
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 interface VerificationReport {
   agent1Raw: string;
@@ -20,11 +14,11 @@ interface VerificationReport {
 }
 
 export default function ExpertReport() {
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
-  const [profile, setProfile] = useState<Record<string, any>>({});
   const [report, setReport] = useState<VerificationReport | null>(null);
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
 
   useEffect(() => {
     if (!token) return;
@@ -37,22 +31,6 @@ export default function ExpertReport() {
         const planData = await planRes.json();
         if (planData.plan?.verificationReport) {
           setReport(planData.plan.verificationReport);
-        }
-
-        const profileRes = await fetch('http://localhost:3000/api/v1/onboarding/me', {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        
-        if (profileRes.ok) {
-          const profileData = await profileRes.json();
-          if (profileData.profile) {
-             const p = JSON.parse(profileData.profile.personalInfo);
-             const f = JSON.parse(profileData.profile.fitnessGoals);
-             const l = JSON.parse(profileData.profile.lifestyle);
-             const h = JSON.parse(profileData.profile.healthData);
-             const food = JSON.parse(profileData.profile.foodPreferences);
-             setProfile({ ...p, ...f, ...l, ...h, ...food });
-          }
         }
       } catch (e) {
         console.error(e);
@@ -68,48 +46,127 @@ export default function ExpertReport() {
     return <div className="min-h-screen bg-black text-white flex items-center justify-center">Loading Report...</div>;
   }
 
-  // Parse Agent Data safely
   const parseJsonStr = (str: string | undefined) => {
     if (!str) return null;
-    try {
-      return JSON.parse(str);
-    } catch {
-      return null;
-    }
+    try { return JSON.parse(str); } catch { return null; }
   };
 
-  const agent1 = parseJsonStr(report?.agent1Raw);
-  const agent2 = parseJsonStr(report?.agent2Raw);
-  const agent3 = parseJsonStr(report?.agent3Raw);
+  const handleDownloadPDF = () => {
+    if (!report) return;
+    setIsGeneratingPdf(true);
 
-  const MealCard = ({ meal }: { meal: any }) => (
-    <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 mb-3">
-      <div className="flex justify-between items-start mb-2">
-        <h4 className="font-medium text-white flex items-center gap-2">
-          <ChefHat size={16} className="text-zinc-400"/> {meal.name}
-        </h4>
-        <div className="flex items-center text-xs text-zinc-400 gap-1">
-          <Clock size={12} /> {meal.time}
-        </div>
-      </div>
-      <p className="text-sm text-zinc-400 mb-3">{meal.description}</p>
+    const doc = new jsPDF();
+    const agent1 = parseJsonStr(report.agent1Raw);
+    const agent2 = parseJsonStr(report.agent2Raw);
+    const agent3 = parseJsonStr(report.agent3Raw);
+
+    // Title
+    doc.setFontSize(22);
+    doc.setTextColor(0, 0, 0);
+    doc.text('LuminaFit Clinical Nutrition Report', 14, 20);
+
+    doc.setFontSize(12);
+    doc.setTextColor(100, 100, 100);
+    doc.text(`Patient: ${user?.name || 'Unknown'} | Confidence Score: ${report.confidenceScore}%`, 14, 30);
+    doc.line(14, 35, 196, 35);
+
+    // AI Insight
+    if (agent3?.aiInsight) {
+      doc.setFontSize(14);
+      doc.setTextColor(0, 0, 0);
+      doc.text('Clinical Synthesis', 14, 45);
       
-      <div className="flex gap-4 mb-3 text-xs">
-        <span className="flex items-center gap-1 text-orange-400"><Flame size={14}/> {meal.calories} kcal</span>
-        <span className="text-blue-400">P: {meal.macros?.protein}g</span>
-        <span className="text-emerald-400">C: {meal.macros?.carbs}g</span>
-        <span className="text-yellow-400">F: {meal.macros?.fats}g</span>
-      </div>
-      
-      <div className="text-xs text-zinc-500">
-        <strong className="text-zinc-300">Ingredients:</strong> {meal.ingredients?.join(', ')}
-      </div>
-    </div>
-  );
+      doc.setFontSize(10);
+      doc.setTextColor(50, 50, 50);
+      const splitText = doc.splitTextToSize(`"${agent3.aiInsight}"`, 180);
+      doc.text(splitText, 14, 55);
+    }
+
+    // QA Review Details
+    let yPos = 80;
+    if (agent2?.issuesFound?.length > 0 || agent2?.suggestions?.length > 0) {
+      doc.setFontSize(14);
+      doc.setTextColor(0, 0, 0);
+      doc.text('QA Review Findings', 14, yPos);
+      yPos += 10;
+
+      if (agent2?.issuesFound?.length > 0) {
+        doc.setFontSize(10);
+        doc.setTextColor(200, 0, 0);
+        doc.text('Issues Identified:', 14, yPos);
+        yPos += 6;
+        agent2.issuesFound.forEach((issue: string) => {
+          doc.text(`• ${issue}`, 18, yPos);
+          yPos += 6;
+        });
+        yPos += 4;
+      }
+
+      if (agent2?.suggestions?.length > 0) {
+        doc.setFontSize(10);
+        doc.setTextColor(200, 150, 0);
+        doc.text('Suggestions:', 14, yPos);
+        yPos += 6;
+        agent2.suggestions.forEach((sug: string) => {
+          doc.text(`• ${sug}`, 18, yPos);
+          yPos += 6;
+        });
+      }
+      yPos += 10;
+    }
+
+    // Optimizer Corrections
+    if (agent3?.correctionsApplied?.length > 0) {
+      doc.setFontSize(14);
+      doc.setTextColor(0, 0, 0);
+      doc.text('Optimizer Corrections Applied', 14, yPos);
+      yPos += 10;
+      doc.setFontSize(10);
+      doc.setTextColor(0, 150, 0);
+      agent3.correctionsApplied.forEach((corr: string) => {
+        doc.text(`• ${corr}`, 14, yPos);
+        yPos += 6;
+      });
+      yPos += 10;
+    }
+
+    // Meals Table
+    const meals = agent3?.meals || agent1?.meals || [];
+    if (meals.length > 0) {
+      autoTable(doc, {
+        startY: yPos,
+        head: [['Meal', 'Time', 'Calories', 'Macros (P/C/F)']],
+        body: meals.map((m: any) => [
+          m.name,
+          m.time || '-',
+          `${m.calories} kcal`,
+          `${m.macros?.protein}g / ${m.macros?.carbs}g / ${m.macros?.fats}g`
+        ]),
+        theme: 'striped',
+        headStyles: { fillColor: [40, 40, 40] }
+      });
+    }
+
+    // Footer
+    const pageCount = (doc as any).internal.getNumberOfPages();
+    for (let i = 1; i <= pageCount; i++) {
+      doc.setPage(i);
+      doc.setFontSize(8);
+      doc.setTextColor(150, 150, 150);
+      doc.text(
+        `Generated by LuminaFit Agent Ecosystem | Page ${i} of ${pageCount}`,
+        14,
+        doc.internal.pageSize.height - 10
+      );
+    }
+
+    doc.save(`LuminaFit_Report_${user?.name?.replace(/\s+/g, '_')}.pdf`);
+    setIsGeneratingPdf(false);
+  };
 
   return (
-    <div className="min-h-screen bg-black text-white p-8 pb-32">
-      <div className="max-w-5xl mx-auto">
+    <div className="min-h-screen bg-black text-white p-8">
+      <div className="max-w-3xl mx-auto">
         <button 
           onClick={() => navigate('/dashboard')}
           className="flex items-center gap-2 text-zinc-500 hover:text-white transition-colors mb-8"
@@ -117,170 +174,57 @@ export default function ExpertReport() {
           <ArrowLeft size={16} /> Back to Dashboard
         </button>
 
-        <header className="mb-12">
-          <h1 className="text-3xl font-semibold tracking-tight flex items-center gap-3">
-            <Activity className="text-emerald-500" /> Clinical Dietician Report
-          </h1>
-          <p className="text-zinc-500 mt-2">Transparent evaluation logs from the multi-agent AI pipeline.</p>
+        <header className="mb-12 text-center">
+          <div className="w-16 h-16 bg-zinc-900 border border-zinc-800 rounded-full flex items-center justify-center mx-auto mb-4">
+            <Activity className="text-emerald-500" size={32} />
+          </div>
+          <h1 className="text-3xl font-semibold tracking-tight">Clinical Dietician Report</h1>
+          <p className="text-zinc-500 mt-2 max-w-lg mx-auto">
+            Your highly personalized nutrition protocol has been thoroughly reviewed and optimized by our multi-agent QA system.
+          </p>
         </header>
 
-        <div className="space-y-8">
-          {/* Section 1: Form Data */}
-          <section>
-            <h2 className="text-xl font-medium mb-4">Client Onboarding Data</h2>
-            <Card className="p-6 bg-zinc-950 border-zinc-800">
-              {Object.keys(profile).length > 0 ? (
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  {Object.entries(profile).map(([key, value]) => (
-                    <div key={key} className="border-b border-zinc-900 pb-2">
-                      <div className="text-xs text-zinc-500 capitalize">{key.replace(/([A-Z])/g, ' $1').trim()}</div>
-                      <div className="text-sm font-medium mt-1">{String(value || 'N/A')}</div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-zinc-500 text-sm">No profile data found.</p>
-              )}
-            </Card>
-          </section>
+        <Card className="bg-zinc-950 border-zinc-800 p-8">
+          <div className="flex flex-col items-center justify-center py-8">
+            
+            <div className="text-center mb-8">
+              <div className="flex items-center justify-center gap-3 mb-2">
+                <CheckCircle2 className="text-emerald-500" size={24} />
+                <h2 className="text-2xl font-medium">Report Ready</h2>
+              </div>
+              <p className="text-zinc-400">
+                The QA system assigned a confidence score of 
+                <span className={`font-bold ml-1 ${report?.confidenceScore && report.confidenceScore >= 90 ? 'text-emerald-400' : 'text-yellow-400'}`}>
+                  {report?.confidenceScore || 'N/A'}%
+                </span>.
+              </p>
+            </div>
 
-          {/* Section 2: Agent 1 */}
-          <section>
-            <h2 className="text-xl font-medium mb-4 text-blue-400 flex items-center gap-2">
-              <FileJson size={18} /> Model 1: Generation Phase
-            </h2>
-            <Card className="p-6 border-zinc-800 bg-zinc-950">
-              {agent1 ? (
-                <div>
-                  <div className="flex gap-6 mb-6 pb-6 border-b border-zinc-800">
-                    <div>
-                      <div className="text-xs text-zinc-500">Proposed Calories</div>
-                      <div className="text-xl font-medium text-white">{agent1.totalCalories}</div>
-                    </div>
-                    <div>
-                      <div className="text-xs text-zinc-500">Proposed Protein</div>
-                      <div className="text-xl font-medium text-blue-400">{agent1.proteinG}g</div>
-                    </div>
-                    <div>
-                      <div className="text-xs text-zinc-500">Proposed Carbs</div>
-                      <div className="text-xl font-medium text-emerald-400">{agent1.carbsG}g</div>
-                    </div>
-                    <div>
-                      <div className="text-xs text-zinc-500">Proposed Fats</div>
-                      <div className="text-xl font-medium text-yellow-400">{agent1.fatsG}g</div>
-                    </div>
-                  </div>
-                  <h3 className="text-sm font-medium text-zinc-300 mb-4">Proposed Draft Meals</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {agent1.meals?.map((meal: any, idx: number) => <MealCard key={idx} meal={meal} />)}
-                  </div>
-                </div>
-              ) : (
-                <p className="text-zinc-500 text-sm">Agent 1 data is unavailable or unparseable.</p>
-              )}
-            </Card>
-          </section>
+            <div className="flex flex-col sm:flex-row gap-4 w-full max-w-md">
+              <button 
+                onClick={handleDownloadPDF}
+                disabled={isGeneratingPdf || !report}
+                className="flex-1 flex items-center justify-center gap-2 bg-white text-black py-3 px-6 rounded-lg font-medium hover:bg-zinc-200 transition-colors disabled:opacity-50"
+              >
+                {isGeneratingPdf ? 'Generating...' : (
+                  <>
+                    <Download size={18} />
+                    Download PDF
+                  </>
+                )}
+              </button>
+            </div>
 
-          {/* Section 3: Agent 2 */}
-          <section>
-            <h2 className="text-xl font-medium mb-4 text-red-400 flex items-center gap-2">
-              <CheckCircle2 size={18} /> Model 2: Quality Assurance Review
-            </h2>
-            <Card className="p-6 border-zinc-800 bg-zinc-950">
-              {agent2 ? (
-                <div>
-                  <div className="flex items-center gap-4 mb-6 pb-6 border-b border-zinc-800">
-                    <div className={`text-3xl font-bold ${agent2.confidenceScore >= 90 ? 'text-emerald-500' : 'text-yellow-500'}`}>
-                      {agent2.confidenceScore}%
-                    </div>
-                    <div className="text-sm text-zinc-400">
-                      QA Confidence Score <br/>
-                      <span className="text-xs">Based on macro math & allergy checks</span>
-                    </div>
-                  </div>
+            <div className="mt-8 p-4 bg-zinc-900/50 border border-zinc-800/50 rounded-xl max-w-md text-sm text-zinc-500 flex items-start gap-3">
+              <AlertTriangle className="text-yellow-500 flex-shrink-0" size={16} />
+              <p>
+                To protect our proprietary IP, we no longer expose the raw internal chain-of-thought of our Agent Models. 
+                Please download the sanitized PDF for a readable clinical overview.
+              </p>
+            </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                      <h3 className="text-sm font-medium text-zinc-300 mb-3 flex items-center gap-2">
-                        <AlertTriangle size={16} className="text-red-400"/> Issues Identified
-                      </h3>
-                      {agent2.issuesFound?.length > 0 ? (
-                        <ul className="space-y-2">
-                          {agent2.issuesFound.map((issue: string, idx: number) => (
-                            <li key={idx} className="text-sm text-red-300 bg-red-950/30 p-3 rounded-lg border border-red-900/50">
-                              {issue}
-                            </li>
-                          ))}
-                        </ul>
-                      ) : (
-                        <div className="text-sm text-emerald-400 bg-emerald-950/30 p-3 rounded-lg border border-emerald-900/50">
-                          ✓ No clinical or mathematical issues found in Agent 1's draft.
-                        </div>
-                      )}
-                    </div>
-                    <div>
-                      <h3 className="text-sm font-medium text-zinc-300 mb-3 flex items-center gap-2">
-                        <Lightbulb size={16} className="text-yellow-400"/> Fix Suggestions
-                      </h3>
-                      {agent2.suggestions?.length > 0 ? (
-                        <ul className="space-y-2">
-                          {agent2.suggestions.map((sug: string, idx: number) => (
-                            <li key={idx} className="text-sm text-yellow-300 bg-yellow-950/30 p-3 rounded-lg border border-yellow-900/50">
-                              {sug}
-                            </li>
-                          ))}
-                        </ul>
-                      ) : (
-                        <div className="text-sm text-zinc-500 italic">No suggestions provided.</div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <p className="text-zinc-500 text-sm">Agent 2 data is unavailable or unparseable.</p>
-              )}
-            </Card>
-          </section>
-
-          {/* Section 4: Agent 3 */}
-          <section>
-            <h2 className="text-xl font-medium mb-4 text-emerald-400 flex items-center gap-2">
-              <Activity size={18} /> Model 3: Optimization & Synthesis
-            </h2>
-            <Card className="p-6 border-zinc-800 bg-zinc-950">
-              {agent3 ? (
-                <div>
-                   <div className="mb-6 p-4 rounded-xl bg-gradient-to-r from-emerald-950/40 to-transparent border border-emerald-900/30">
-                    <h3 className="text-sm font-medium text-emerald-400 mb-2">Final AI Insight</h3>
-                    <p className="text-sm text-zinc-300 leading-relaxed">
-                      "{agent3.aiInsight}"
-                    </p>
-                  </div>
-
-                  {agent3.correctionsApplied?.length > 0 && (
-                    <div className="mb-6">
-                      <h3 className="text-sm font-medium text-zinc-300 mb-3">Corrections Applied by Optimizer</h3>
-                      <ul className="space-y-2">
-                        {agent3.correctionsApplied.map((corr: string, idx: number) => (
-                          <li key={idx} className="text-sm text-emerald-300 flex items-start gap-2">
-                            <CheckCircle2 size={14} className="mt-0.5 flex-shrink-0" /> {corr}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-
-                  <h3 className="text-sm font-medium text-zinc-300 mb-4 pt-4 border-t border-zinc-800">Final Locked Meals</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {agent3.meals?.map((meal: any, idx: number) => <MealCard key={idx} meal={meal} />)}
-                  </div>
-                </div>
-              ) : (
-                <p className="text-zinc-500 text-sm">Agent 3 data is unavailable or unparseable.</p>
-              )}
-            </Card>
-          </section>
-        </div>
+          </div>
+        </Card>
       </div>
     </div>
   );

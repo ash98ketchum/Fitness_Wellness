@@ -6,6 +6,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 
 interface MealData {
+  id?: string;
   name: string;
   time: string;
   calories: number;
@@ -61,6 +62,7 @@ export default function Dashboard() {
             carbsG: data.plan.carbsG || fallbackPlan.carbsG,
             fatsG: data.plan.fatsG || fallbackPlan.fatsG,
             meals: data.plan.meals?.length > 0 ? data.plan.meals.map((m: any) => ({
+              id: m.id,
               name: m.name,
               time: m.time || '—',
               calories: m.calories,
@@ -106,8 +108,8 @@ export default function Dashboard() {
         </div>
         
         <nav className="flex-1 space-y-2 text-sm font-medium">
-          <NavItem icon={<Activity />} label="Dashboard" active />
-          <NavItem icon={<Utensils />} label="Meals" />
+          <div onClick={() => navigate('/dashboard')}><NavItem icon={<Activity />} label="Dashboard" active /></div>
+          <div onClick={() => navigate('/planner')}><NavItem icon={<Utensils />} label="Meals" /></div>
           <div onClick={() => navigate('/expert-report')}><NavItem icon={<Award />} label="Expert Report" AI /></div>
           <NavItem icon={<Settings />} label="Settings" />
         </nav>
@@ -183,11 +185,13 @@ export default function Dashboard() {
               {plan.meals.map((meal, i) => (
                 <MealCard
                   key={i}
+                  id={meal.id}
                   time={meal.time}
                   name={meal.name}
                   calories={meal.calories}
                   macros={`P: ${meal.macros.protein}g • C: ${meal.macros.carbs}g • F: ${meal.macros.fats}g`}
                   status={i === 0 ? 'completed' : 'upcoming'}
+                  onClick={() => meal.id && navigate(`/meal/${meal.id}`)}
                 />
               ))}
             </div>
@@ -245,9 +249,9 @@ function MacroCard({ label, value, target, icon, color }: { label: string; value
   );
 }
 
-function MealCard({ time, name, calories, macros, status }: { time: string; name: string; calories: number; macros: string; status: 'completed' | 'upcoming' }) {
+function MealCard({ id, time, name, calories, macros, status, onClick }: { id?: string; time: string; name: string; calories: number; macros: string; status: 'completed' | 'upcoming', onClick?: () => void }) {
   return (
-    <Card className={`p-4 flex items-center justify-between transition-colors hover:border-zinc-700 cursor-pointer ${status === 'completed' ? 'opacity-60' : ''}`}>
+    <Card onClick={onClick} className={`p-4 flex items-center justify-between transition-colors hover:border-zinc-700 cursor-pointer ${status === 'completed' ? 'opacity-60' : ''}`}>
       <div className="flex items-center gap-4">
         <div className="w-12 h-12 rounded bg-zinc-900 flex items-center justify-center flex-shrink-0 text-zinc-500 text-xs font-medium">
           {time.split(' ')[0]}

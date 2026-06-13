@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
-import { Input } from '../../components/ui/Input';
-import { Button } from '../../components/ui/Button';
-import { useAuth } from '../../contexts/AuthContext';
-import { API_URL } from '../../constants/api';
+import { Input } from '../components/ui/Input';
+import { Button } from '../components/ui/Button';
+import { useAuth } from '../contexts/AuthContext';
+import { API_URL } from '../constants/api';
 import { useRouter } from 'expo-router';
 
 export default function OnboardingScreen() {

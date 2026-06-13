@@ -47,7 +47,6 @@ export default function LandingScreen() {
             <TouchableOpacity onPress={() => router.push('/(auth)/login')}>
               <Text style={styles.navLink}>Log in</Text>
             </TouchableOpacity>
-            <Button title="Get Started" onPress={() => router.push('/(auth)/signup')} />
           </View>
         </View>
 

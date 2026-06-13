@@ -35,7 +35,7 @@ export default function SignupScreen() {
       }
 
       await login(data.token, data.user);
-      router.replace('/(app)/dashboard');
+      router.replace('/onboarding');
     } catch (error: any) {
       Alert.alert('Signup Failed', error.message);
     } finally {

@@ -17,11 +17,11 @@ app.use('/api/v1/agents', agentRoutes);
 
 // Mock Auth Routes for Testing
 app.post('/api/v1/auth/signup', (req, res) => {
-  res.json({ token: 'mock-jwt-token', user: { id: 'usr_1', name: req.body.name, email: req.body.email } });
+  res.json({ token: 'mock-jwt-token', user: { id: 'usr_1', name: req.body.name, email: req.body.email, onboardingCompleted: false } });
 });
 
 app.post('/api/v1/auth/login', (req, res) => {
-  res.json({ token: 'mock-jwt-token', user: { id: 'usr_1', name: 'Test User', email: req.body.email } });
+  res.json({ token: 'mock-jwt-token', user: { id: 'usr_1', name: 'Test User', email: req.body.email, onboardingCompleted: true } });
 });
 
 // Healthcheck

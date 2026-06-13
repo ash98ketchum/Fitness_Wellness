@@ -8,7 +8,6 @@ export default function AppLayout() {
       <Tabs.Screen name="planner" options={{ title: 'Planner', tabBarIcon: ({ color }) => <Calendar color={color} size={24} /> }} />
       <Tabs.Screen name="meal/[id]" options={{ href: null }} />
       <Tabs.Screen name="explore" options={{ href: null }} />
-      <Tabs.Screen name="onboarding" options={{ href: null }} />
     </Tabs>
   );
 }

@@ -34,7 +34,11 @@ export default function LoginScreen() {
       }
 
       await login(data.token, data.user);
-      router.replace('/(app)/dashboard');
+      if (data.user?.onboardingCompleted === false) {
+        router.replace('/onboarding');
+      } else {
+        router.replace('/(app)/dashboard');
+      }
     } catch (error: any) {
       Alert.alert('Login Failed', error.message);
     } finally {

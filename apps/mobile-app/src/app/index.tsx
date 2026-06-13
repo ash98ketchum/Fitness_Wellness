@@ -103,7 +103,7 @@ export default function LandingScreen() {
           {/* Pricing */}
           <Animated.View entering={FadeIn.delay(400).duration(800)} style={styles.section}>
             <Text style={styles.h2}>Simple, transparent pricing.</Text>
-            <Text style={styles.h2Sub}>Start for free, upgrade when you need more power.</p>
+            <Text style={styles.h2Sub}>Start for free, upgrade when you need more power.</Text>
             
             <View style={styles.pricingCardPro}>
               <View style={styles.gradientTopBar} />

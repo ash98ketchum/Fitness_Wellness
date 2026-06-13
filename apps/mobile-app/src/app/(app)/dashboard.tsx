@@ -21,10 +21,7 @@ export default function DashboardScreen() {
         fetch(`${API_URL}/progress/today`, { headers: { Authorization: `Bearer ${token}` } })
       ]);
       
-      if (!planRes.ok && planRes.status === 404) {
-        router.replace('/(app)/onboarding');
-        return;
-      }
+      // 404 just means no plan generated yet, we should show the empty state, not redirect to onboarding.
       
       if (planRes.ok) {
         const planData = await planRes.json();

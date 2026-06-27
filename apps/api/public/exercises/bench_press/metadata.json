@@ -1,0 +1,35 @@
+{
+  "id": "bench_press",
+  "name": "Barbell Bench Press",
+  "phases": [
+    "setup",
+    "grip",
+    "posture",
+    "movement",
+    "loop"
+  ],
+  "assets": {
+    "setup": {
+      "mp4": "setup.mp4",
+      "webm": "setup.webm"
+    },
+    "grip": {
+      "mp4": "grip.mp4",
+      "webm": "grip.webm"
+    },
+    "posture": {
+      "mp4": "posture.mp4",
+      "webm": "posture.webm"
+    },
+    "movement": {
+      "mp4": "movement.mp4",
+      "webm": "movement.webm"
+    },
+    "loop": {
+      "mp4": "loop.mp4",
+      "webm": "loop.webm"
+    }
+  },
+  "thumbnail": "thumbnail.png",
+  "poster": "poster.png"
+}

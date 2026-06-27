@@ -7,7 +7,7 @@ export function Chatbot() {
   const { isAuthenticated, token } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<{role: 'user' | 'assistant', content: string}[]>([
-    { role: 'assistant', content: "Hi! I'm Lumina, your personal AI Dietician. How can I help you with your meal plan today?" }
+    { role: 'assistant', content: "Hi! I'm Athelya AI, your personal AI Dietician. How can I help you with your meal plan today?" }
   ]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -87,7 +87,7 @@ export function Chatbot() {
                   <Bot size={18} />
                 </div>
                 <div>
-                  <h3 className="text-sm font-medium text-white">Lumina AI</h3>
+                  <h3 className="text-sm font-medium text-white">Athelya AI AI</h3>
                   <p className="text-xs text-zinc-400">Dietician & Coach</p>
                 </div>
               </div>

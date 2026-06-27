@@ -123,6 +123,46 @@ async function callGroq(systemPrompt: string, userPrompt: string): Promise<strin
   }
 }
 
+export async function regenerateMeal(profileData: OnboardingData, mealType: string, targetCalories: number): Promise<GeneratedMeal> {
+  const profile = buildProfileSummary(profileData);
+  
+  if (apiKeys.length === 0) {
+    return getFallbackPlan().meals[0]; // fallback
+  }
+
+  const prompt = `You are a sports nutritionist AI. Generate a SINGLE ${mealType} meal strictly according to user data.
+The meal MUST be roughly ${targetCalories} calories.
+
+ABSOLUTE RULES:
+1. You MUST return ONLY a valid, parseable JSON object. No markdown wrapping.
+2. Dietary Preference: ${profileData.dietPreference || 'None'}.
+3. Fatal Allergies & Dislikes: MUST NOT include ${profileData.allergies || 'None'} or ${profileData.dislikedFoods || 'None'}.
+
+Return JSON EXACTLY matching this structure:
+{
+  "name": "<meal name>",
+  "time": "<time like 08:00 AM>",
+  "calories": ${targetCalories},
+  "macros": { "protein": <number>, "carbs": <number>, "fats": <number> },
+  "ingredients": ["ingredient 1"],
+  "description": "<brief cooking instruction>",
+  "prepTime": <number>,
+  "difficulty": "<Easy, Medium, or Hard>",
+  "portionSizes": { "ingredient 1": "100g" },
+  "recipeSteps": ["Step 1"]
+}`;
+
+  try {
+    const raw = await callGroq(prompt, profile);
+    const parsed = JSON.parse(raw);
+    if (!parsed.name) throw new Error("Invalid generated meal");
+    return parsed as GeneratedMeal;
+  } catch (err) {
+    console.error('[Groq] regenerateMeal error:', err);
+    return getFallbackPlan().meals[0];
+  }
+}
+
 export async function generateDietPlan(profileData: OnboardingData): Promise<GeneratedPlan> {
   const profile = buildProfileSummary(profileData);
   const mealsPerDay = parseInt(profileData.mealsPerDay || '4') || 4;
@@ -313,11 +353,11 @@ export async function chatWithDietician(
   messages: { role: 'user' | 'assistant', content: string }[],
   profileData: Record<string, any>,
   planData: Record<string, any>
-): Promise<string> {
+): Promise<{ reply: string, weightUpdateDetected: boolean, newWeightKg: number | null }> {
   const profile = buildProfileSummary(profileData);
   const planSummary = JSON.stringify(planData, null, 2);
 
-  const systemPrompt = `You are Lumina, a highly intelligent and supportive personal AI Dietician.
+  const systemPrompt = `You are Athelya, a highly intelligent and supportive personal AI Dietician.
 You are aware of the user's clinical profile and their active diet plan.
 
 User Profile:
@@ -330,14 +370,22 @@ ABSOLUTE RULES:
 1. Answer their questions based ONLY on the data provided above.
 2. If they ask to substitute an ingredient, suggest something that strictly fits their macros and avoids their allergies/dislikes.
 3. Be conversational, empathetic, and concise (max 3-4 sentences per response). 
-4. DO NOT use markdown headers, just use clean plain text formatting.`;
+4. DO NOT use markdown headers, just use clean plain text formatting.
+5. IMPORTANT: You MUST return a valid JSON object EXACTLY matching this structure:
+   {
+     "reply": "Your conversational response",
+     "weightUpdateDetected": true or false,
+     "newWeightKg": 75 (if they mentioned a new weight, else null)
+   }
+If the user mentions their current weight, body fat, or requests to update their physical metrics, set weightUpdateDetected to true and extract the newWeightKg.`;
 
-  if (apiKeys.length === 0) return 'Mock AI: I see your profile and plan! How can I help you swap meals today?';
+  if (apiKeys.length === 0) return { reply: 'Mock AI: I see your profile and plan! How can I help you swap meals today?', weightUpdateDetected: false, newWeightKg: null };
 
   const client = getGroqClient();
   try {
     const response = await client.chat.completions.create({
       model: MODEL,
+      response_format: { type: 'json_object' },
       messages: [
         { role: 'system', content: systemPrompt },
         ...messages.map(m => ({ role: m.role as 'user' | 'assistant', content: m.content })),
@@ -345,10 +393,19 @@ ABSOLUTE RULES:
       temperature: 0.5,
       max_tokens: 500,
     });
-    return response.choices[0]?.message?.content || "I'm sorry, I couldn't process that request.";
+    
+    const content = response.choices[0]?.message?.content;
+    if (!content) throw new Error("Empty response");
+    
+    const parsed = JSON.parse(content);
+    return {
+      reply: parsed.reply || "I'm sorry, I couldn't process that request.",
+      weightUpdateDetected: !!parsed.weightUpdateDetected,
+      newWeightKg: parsed.newWeightKg || null
+    };
   } catch (error) {
     console.error('[Groq Chat Error]:', error);
-    return "I'm currently experiencing high load. Please try again in a moment.";
+    return { reply: "I'm currently experiencing high load. Please try again in a moment.", weightUpdateDetected: false, newWeightKg: null };
   }
 }
 
@@ -394,5 +451,172 @@ RULES:
   } catch (error) {
     console.error('[Groq Chat Error]:', error);
     return "I'm currently experiencing high load. Please try again in a moment.";
+  }
+}
+
+// ─────────────────────────────────────────────────────────
+// PHASE 3: WORKOUT GENERATION ENGINE
+// ─────────────────────────────────────────────────────────
+
+export interface WorkoutGenRequest {
+  profile: string;
+  injuries: string[];
+  fatigueLevel: string;
+  availableExercises: { id: string; name: string; targetMuscles: string; equipment: string }[];
+}
+
+export async function generateWorkoutPlan(req: WorkoutGenRequest) {
+  const { profile, injuries, fatigueLevel, availableExercises } = req;
+  
+  const systemPrompt = `You are an elite, highly precise sports AI Personal Trainer. You generate safe, progressive, and dynamic workout sessions based on the user's profile, injuries, and recovery state.
+
+ABSOLUTE RULES (FAILURE IS UNACCEPTABLE):
+1. Return ONLY a valid, parseable JSON object. No markdown, no extra text.
+2. Select 4-6 exercises exclusively from the "Available Exercises" list provided.
+3. INJURY GUARDRAIL: Do NOT select exercises that target injured muscles: ${injuries.length > 0 ? injuries.join(', ') : 'None'}.
+4. FATIGUE GUARDRAIL: The user's fatigue level is ${fatigueLevel}. If HIGH, reduce sets and volume.
+5. Provide realistic "suggestedWeight" in kg based on standard beginner/intermediate strength levels, erring on the side of safety.
+6. The exact "exerciseName" in the output MUST exactly match a name from the Available Exercises list.
+
+Available Exercises:
+${JSON.stringify(availableExercises, null, 2)}
+
+User Profile:
+${profile}
+
+Return JSON EXACTLY matching this structure:
+{
+  "title": "<e.g., Push Day, Full Body, Upper Body>",
+  "durationMinutes": <number>,
+  "caloriesBurned": <number>,
+  "exercises": [
+    {
+      "exerciseName": "<exact name from available list>",
+      "setsTarget": <integer>,
+      "repsTarget": "<string like '8-12'>",
+      "restSeconds": <integer like 90>,
+      "tempo": "<string like '3-1-1'>",
+      "intensity": "<string like 'Moderate' or 'RPE 8'>",
+      "suggestedWeight": <float in kg>
+    }
+  ]
+}`;
+
+  if (apiKeys.length === 0) {
+    // Fallback if no API key
+    return {
+      title: "Full Body Strength",
+      durationMinutes: 45,
+      caloriesBurned: 300,
+      exercises: [
+        {
+          exerciseName: "Barbell Back Squat",
+          setsTarget: 3,
+          repsTarget: "8-10",
+          restSeconds: 90,
+          tempo: "3-1-1",
+          intensity: "Moderate",
+          suggestedWeight: 40
+        },
+        {
+          exerciseName: "Barbell Bench Press",
+          setsTarget: 3,
+          repsTarget: "8-10",
+          restSeconds: 90,
+          tempo: "3-1-1",
+          intensity: "Moderate",
+          suggestedWeight: 30
+        }
+      ]
+    };
+  }
+
+  const client = getGroqClient();
+  try {
+    const response = await client.chat.completions.create({
+      model: MODEL,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: 'Generate today\'s optimal workout session based on my state.' },
+      ],
+      temperature: 0.2, // low temp for schema adherence
+      max_tokens: 2500,
+      response_format: { type: 'json_object' },
+    });
+    
+    return JSON.parse(response.choices[0]?.message?.content || '{}');
+  } catch (error) {
+    console.error('[Groq Workout Gen Error]:', error);
+    throw new Error('Failed to generate workout plan');
+  }
+}
+
+export async function chatWithTrainer(messages: any[], currentExercise: any, profile: string) {
+  const systemPrompt = `You are a hype, supportive, and highly knowledgeable AI Personal Trainer.
+Your current client is working on this exercise: ${currentExercise.name} (${currentExercise.targetMuscles}).
+They have to do ${currentExercise.setsTarget} sets of ${currentExercise.repsTarget} reps at ${currentExercise.intensity}.
+Client Profile: ${profile}
+
+Your job is to:
+1. Provide form cues if they ask.
+2. Suggest regressions (easier) or progressions (harder) if they are struggling or find it too easy.
+3. Hype them up and motivate them during their rest periods.
+Keep your responses very short, punchy, and conversational (like a real trainer speaking). Max 2-3 sentences.`;
+
+  if (apiKeys.length === 0) return "Mock Trainer: Keep that core tight and push through! You got this!";
+
+  const client = getGroqClient();
+  try {
+    const response = await client.chat.completions.create({
+      model: MODEL,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        ...messages.map(m => ({ role: m.role as 'user' | 'assistant', content: m.content })),
+      ],
+      temperature: 0.7,
+      max_tokens: 300,
+    });
+    return response.choices[0]?.message?.content || "Let's keep moving!";
+  } catch (error) {
+    console.error('[Groq Trainer Chat Error]:', error);
+    return "I'm experiencing a bit of lag, but keep that form tight!";
+  }
+}
+
+export async function askGymCoach(
+  messages: any[],
+  currentExercise: any,
+  profile: string
+) {
+  const systemPrompt = `You are a biomechanics expert and elite AI Gym Coach.
+Your current client is working on: ${currentExercise.name} (${currentExercise.targetMuscles}).
+Client Profile: ${profile}
+
+ABSOLUTE RULES:
+1. When the user asks a form, mechanics, or substitution question (e.g., "Where should my hands go?" or "How wide should I grip?"), you MUST structure your answer into exactly three categories:
+   - GOOD technique: Explain the optimal, safest way to do it.
+   - ACCEPTABLE technique: Explain a safe variation or minor deviation.
+   - BAD technique: Explain what they must avoid to prevent injury.
+2. Provide human reasoning for WHY each is good/bad based on anatomy and biomechanics.
+3. If they ask about substitutions, use the same format (GOOD substitution, ACCEPTABLE substitution, BAD substitution).
+4. Do not use markdown headers (# or ##), just bold text and bullet points.`;
+
+  if (apiKeys.length === 0) return "Mock Coach: GOOD technique is perfect alignment. BAD technique causes injury.";
+
+  const client = getGroqClient();
+  try {
+    const response = await client.chat.completions.create({
+      model: MODEL,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        ...messages.map(m => ({ role: m.role as 'user' | 'assistant', content: m.content })),
+      ],
+      temperature: 0.3,
+      max_tokens: 800,
+    });
+    return response.choices[0]?.message?.content || "Focus on form and safety.";
+  } catch (error) {
+    console.error('[Groq Gym Coach Error]:', error);
+    return "I'm currently experiencing high load. Please focus on slow, controlled movements.";
   }
 }

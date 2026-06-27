@@ -57,4 +57,40 @@ router.get('/active', async (req, res) => {
   });
 });
 
+// Endpoint: Fetch Latest Plan for Dashboard
+router.get('/latest', async (req, res) => {
+  res.json({
+    plan: {
+      id: 'mock-plan-123',
+      totalCalories: 2400,
+      proteinG: 180,
+      carbsG: 220,
+      fatsG: 80,
+      meals: [
+        {
+          id: 'meal-1',
+          time: '08:00 AM',
+          name: 'Protein Oatmeal & Berries',
+          calories: 450,
+          macros: { protein: 30, carbs: 55, fats: 10 }
+        },
+        {
+          id: 'meal-2',
+          time: '01:00 PM',
+          name: 'Grilled Chicken Salad',
+          calories: 550,
+          macros: { protein: 50, carbs: 20, fats: 25 }
+        },
+        {
+          id: 'meal-3',
+          time: '07:00 PM',
+          name: 'Salmon & Sweet Potato',
+          calories: 600,
+          macros: { protein: 45, carbs: 40, fats: 20 }
+        }
+      ]
+    }
+  });
+});
+
 module.exports = router;

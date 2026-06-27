@@ -1,10 +1,10 @@
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = env("DATABASE_URL")
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
 }
 
 model Gym {
@@ -35,6 +35,13 @@ model User {
   dailyProgresses   DailyProgress[]
   mealLogs          MealLog[]
   userMemory        UserMemory?
+  workoutSessions   WorkoutSession[]
+  healthProfile     UserHealthProfile?
+  transformationState TransformationState?
+  eventLogs         EventLog[]
+  aiDecisionLogs    AIDecisionLog[]
+  streaks           Streak?
+  vectorMemories    UserVectorMemory[]
 }
 
 model OnboardingProfile {
@@ -42,11 +49,20 @@ model OnboardingProfile {
   userId           String   @unique
   user             User     @relation(fields: [userId], references: [id])
   
-  personalInfo     String   // JSON stored as text for SQLite
+  personalInfo     String   // JSON stored as text
   fitnessGoals     String
   lifestyle        String
   healthData       String
   foodPreferences  String
+  
+  // Expanded Phase 4 Fields
+  bloodGroup       String?
+  timeZone         String?
+  occupation       String?
+  diseases         String?  // JSON array
+  allergies        String?  // JSON array
+  medications      String?  // JSON array
+  medicalReports   String?  // JSON array of file URLs
   
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
@@ -165,4 +181,167 @@ model UserMemory {
   
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
+}
+
+// ─────────────────────────────────────────────────────────
+// PHASE 3: WORKOUT SYSTEM
+// ─────────────────────────────────────────────────────────
+
+// Static Exercise Library
+model Exercise {
+  id               String   @id @default(uuid())
+  name             String
+  bodyPart         String
+  targetMuscles    String   // JSON array
+  secondaryMuscles String   // JSON array
+  equipment        String
+  difficulty       String
+  setupAnimationUrl String?
+  gripAnimationUrl  String?
+  postureAnimationUrl String?
+  movementAnimationUrl String?
+  loopAnimationUrl  String?
+  instructions     String   // JSON array of steps
+  
+  workouts         WorkoutExercise[]
+}
+
+// A generated workout for a specific day
+model WorkoutSession {
+  id               String   @id @default(uuid())
+  userId           String
+  user             User     @relation(fields: [userId], references: [id])
+  date             DateTime
+  title            String   // e.g. "Chest + Triceps"
+  status           String   @default("PLANNED") // PLANNED, IN_PROGRESS, COMPLETED, SKIPPED
+  durationMinutes  Int?
+  caloriesBurned   Int?
+  
+  exercises        WorkoutExercise[]
+  
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+// Specific exercise within a workout
+model WorkoutExercise {
+  id               String   @id @default(uuid())
+  workoutId        String
+  workout          WorkoutSession @relation(fields: [workoutId], references: [id])
+  exerciseId       String
+  exercise         Exercise @relation(fields: [exerciseId], references: [id])
+  
+  order            Int
+  setsTarget       Int
+  repsTarget       String   // e.g., "10", "8-12", "Till Failure"
+  restSeconds      Int      @default(90)
+  suggestedWeight  Float?   // in kg
+  tempo            String?  // e.g., "3-1-1"
+  intensity        String?  // e.g., "Moderate", "RPE 8"
+  
+  sets             WorkoutSet[]
+}
+
+// Granular tracking of actual performance
+model WorkoutSet {
+  id               String   @id @default(uuid())
+  workoutExerciseId String
+  workoutExercise  WorkoutExercise @relation(fields: [workoutExerciseId], references: [id])
+  
+  setNumber        Int
+  repsCompleted    Int?
+  weightUsed       Float?
+  isCompleted      Boolean  @default(false)
+}
+
+// User Health & Safety tracking
+model UserHealthProfile {
+  id               String   @id @default(uuid())
+  userId           String   @unique
+  user             User     @relation(fields: [userId], references: [id])
+  
+  activeInjuries   String   // JSON array e.g., ["Shoulder", "Lower Back"]
+  recoveryScore    Int      @default(100) // 0-100
+  fatigueLevel     String   @default("LOW")
+  
+  updatedAt        DateTime @updatedAt
+}
+
+// ─────────────────────────────────────────────────────────
+// PHASE 4: ADAPTIVE AI OPERATING SYSTEM
+// ─────────────────────────────────────────────────────────
+
+model TransformationState {
+  id                  String   @id @default(uuid())
+  userId              String   @unique
+  user                User     @relation(fields: [userId], references: [id])
+  
+  goal                String   // "Fat Loss", "Muscle Gain", "Maintenance", etc.
+  currentWeight       Float?
+  lastWeightUpdate    DateTime @default(now())
+  targetWeight        Float?
+  estimatedCompletion DateTime?
+  confidenceScore     Int      @default(0)
+  weeklyAdherence     Int      @default(0)
+  recoveryScore       Int      @default(0)
+  currentPhase        String?  // e.g. "Fat Loss Phase 2"
+  weeklyCalorieBudget Int      @default(0)
+  remainingCalories   Int      @default(0)
+  musclePriority      String   // JSON array of strings
+  
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+}
+
+model EventLog {
+  id               String   @id @default(uuid())
+  userId           String
+  user             User     @relation(fields: [userId], references: [id])
+  
+  eventType        String   // e.g., "WORKOUT_SKIPPED", "CHEAT_MEAL", "MOOD_LOGGED"
+  eventData        String   // JSON string with details
+  source           String   @default("SYSTEM") // USER, SYSTEM, AGENT
+  
+  createdAt        DateTime @default(now())
+}
+
+model AIDecisionLog {
+  id               String   @id @default(uuid())
+  userId           String
+  user             User     @relation(fields: [userId], references: [id])
+  
+  reason           String   // The triggering event or context
+  decision         String   // What the Master Coach decided
+  impact           String   // E.g., "Completion delayed 1 day."
+  confidence       Int      // 0-100
+  
+  createdAt        DateTime @default(now())
+}
+
+model Streak {
+  id               String   @id @default(uuid())
+  userId           String   @unique
+  user             User     @relation(fields: [userId], references: [id])
+  
+  workoutStreak    Int      @default(0)
+  nutritionStreak  Int      @default(0)
+  hydrationStreak  Int      @default(0)
+  sleepStreak      Int      @default(0)
+  overallConsistency Int    @default(0) // 0-100 score
+  
+  updatedAt        DateTime @updatedAt
+}
+
+// UserMemory was updated with pgvector support
+// We will add the embedding field when we run postgres extension
+model UserVectorMemory {
+  id               String   @id @default(uuid())
+  userId           String
+  user             User     @relation(fields: [userId], references: [id])
+  
+  content          String   // The text extracted from PDF or interaction
+  metadata         String?  // JSON context
+  embedding        String?  // JSON array of floats for local dev
+  
+  createdAt        DateTime @default(now())
 }

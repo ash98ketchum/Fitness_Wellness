@@ -1,48 +1,140 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, ScrollView, SafeAreaView, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useAuth } from '../../../contexts/AuthContext';
-import { API_URL } from '../../../constants/api';
-import { Clock, ChefHat, Flame, ArrowLeft, Send, Bot, Mic } from 'lucide-react-native';
+import { ArrowLeft, Clock, ChefHat, Flame, Send, Bot, Mic } from 'lucide-react-native';
+import { StatusBar } from 'expo-status-bar';
 
-export default function MealDetailScreen() {
+export default function MealDetail() {
   const { id } = useLocalSearchParams();
-  const { token } = useAuth();
   const router = useRouter();
+  const { user, token } = useAuth();
 
   const [meal, setMeal] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
-  const [messages, setMessages] = useState<{ role: 'user' | 'assistant', content: string }[]>([]);
+// TTS – read AI response out loud
+function speakText(text: string, onEnd?: () => void) {
+  if (Platform.OS === 'web' && typeof window !== 'undefined' && 'speechSynthesis' in window) {
+    window.speechSynthesis.cancel();
+    const utter = new SpeechSynthesisUtterance(text);
+    utter.rate = 1.05;
+    utter.pitch = 1;
+    if (onEnd) utter.onend = onEnd;
+    window.speechSynthesis.speak(utter);
+  } else {
+    if (onEnd) setTimeout(onEnd, 2000);
+  }
+}
+
+  // Chat state
+  const [messages, setMessages] = useState<any[]>([]);
   const [input, setInput] = useState('');
   const [chatLoading, setChatLoading] = useState(false);
-  const [isRecording, setIsRecording] = useState(false);
   const scrollViewRef = useRef<ScrollView>(null);
+  
+  // Voice state
+  const [isVoiceMode, setIsVoiceMode] = useState(false);
+  const [isListening, setIsListening] = useState(false);
+  const recognitionRef = useRef<any>(null);
+  const isVoiceModeRef = useRef(false);
+  const isProcessingRef = useRef(false);
 
   useEffect(() => {
-    if (!token || !id) return;
+    isVoiceModeRef.current = isVoiceMode;
+    isProcessingRef.current = chatLoading;
+  }, [isVoiceMode, chatLoading]);
+
+  const startListening = React.useCallback(() => {
+    if (typeof window === 'undefined') return;
+    const SpeechRecClass = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecClass) {
+      setIsVoiceMode(false);
+      return;
+    }
+
+    if (recognitionRef.current) {
+      try { recognitionRef.current.abort(); } catch (_) {}
+    }
+
+    const recognition = new SpeechRecClass();
+    recognition.lang = 'en-US';
+    recognition.interimResults = false;
+    recognition.continuous = false;
+
+    recognition.onstart = () => setIsListening(true);
     
-    fetch(`${API_URL}/meals/${id}`, {
-      headers: { Authorization: `Bearer ${token}` }
+    recognition.onresult = (event: any) => {
+      const transcript = event.results[0][0].transcript;
+      setInput('');
+      setIsListening(false);
+      handleSendMessage(transcript);
+    };
+
+    recognition.onerror = () => setIsListening(false);
+    
+    recognition.onend = () => {
+      setIsListening(false);
+      if (isVoiceModeRef.current && !isProcessingRef.current) {
+        setTimeout(() => {
+          if (isVoiceModeRef.current && !isProcessingRef.current) {
+            startListening();
+          }
+        }, 500);
+      }
+    };
+
+    recognitionRef.current = recognition;
+    try { recognition.start(); } catch (e) {}
+  }, []);
+
+  const toggleVoiceMode = () => {
+    const newMode = !isVoiceMode;
+    setIsVoiceMode(newMode);
+    if (newMode) {
+      startListening();
+    } else {
+      if (recognitionRef.current) {
+        try { recognitionRef.current.stop(); } catch (_) {}
+      }
+      setIsListening(false);
+      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+      }
+    }
+  };
+
+  useEffect(() => {
+    if (!id || !user || !token) return;
+    
+    fetch(`http://localhost:3000/api/v1/meals/${id}`, {
+      headers: {
+        Authorization: `Bearer ${token}`
+      }
     })
       .then(res => res.json())
       .then(data => {
         if (data.meal) setMeal(data.meal);
       })
       .finally(() => setLoading(false));
-  }, [id, token]);
+  }, [id, user, token]);
 
-  const handleSendMessage = async () => {
-    if (!input.trim() || chatLoading || !meal) return;
+  const handleSendMessage = async (overrideText?: string) => {
+    const userMessage = (overrideText || input).trim();
+    if (!userMessage || chatLoading || !meal || !token) return;
 
-    const userMessage = input.trim();
-    const newMessages = [...messages, { role: 'user' as const, content: userMessage }];
+    const newMessages = [...messages, { role: 'user', content: userMessage }];
     setMessages(newMessages);
     setInput('');
     setChatLoading(true);
+    
+    isProcessingRef.current = true;
+    if (recognitionRef.current) {
+      try { recognitionRef.current.stop(); } catch (_) {}
+    }
 
     try {
-      const response = await fetch(`${API_URL}/agents/cooking`, {
+      const response = await fetch('http://localhost:3000/api/v1/agents/cooking', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -55,172 +147,208 @@ export default function MealDetailScreen() {
       });
 
       const data = await response.json();
-      setMessages([...newMessages, { role: 'assistant', content: data.reply || "I couldn't process that." }]);
-      // If voice was returned, normally we would play audio here
+      const reply = data.reply || "I couldn't process that.";
+      setMessages([...newMessages, { role: 'assistant', content: reply }]);
+      
+      if (isVoiceModeRef.current) {
+        speakText(reply, () => {
+          if (isVoiceModeRef.current) startListening();
+        });
+      }
     } catch (error) {
+      console.error(error);
       setMessages([...newMessages, { role: 'assistant', content: "An error occurred. Please try again." }]);
+      if (isVoiceModeRef.current) startListening();
     } finally {
       setChatLoading(false);
-      setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 100);
-    }
-  };
-
-  const handleVoiceToggle = () => {
-    if (isRecording) {
-      setIsRecording(false);
-      setInput("I'm speaking right now... (Simulated Voice Input)");
-    } else {
-      setIsRecording(true);
+      isProcessingRef.current = false;
+      scrollViewRef.current?.scrollToEnd({ animated: true });
     }
   };
 
   if (loading) {
-    return <View style={styles.center}><ActivityIndicator color="#10b981" /></View>;
+    return (
+      <View className="flex-1 bg-black justify-center items-center">
+        <ActivityIndicator size="large" color="#fff" />
+      </View>
+    );
   }
 
   if (!meal) {
     return (
-      <View style={styles.center}>
-        <Text style={styles.text}>Meal not found</Text>
-        <TouchableOpacity onPress={() => router.back()} style={{marginTop: 16}}><Text style={{color: '#10b981'}}>Go Back</Text></TouchableOpacity>
+      <View className="flex-1 bg-black justify-center items-center p-6">
+        <Text className="text-white text-xl font-semibold mb-4">Meal not found</Text>
+        <TouchableOpacity className="bg-white px-4 py-2 rounded-lg" onPress={() => router.back()}>
+          <Text className="text-black font-medium">Back to Dashboard</Text>
+        </TouchableOpacity>
       </View>
     );
   }
 
   return (
-    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <ArrowLeft color="#fff" size={24} />
+    <View className="flex-1 bg-black">
+      <StatusBar style="light" />
+      
+      <View className="flex-row items-center p-4 border-b border-zinc-900 bg-black">
+        <TouchableOpacity onPress={() => router.back()} className="flex-row items-center mr-4">
+          <ArrowLeft size={20} color="#a1a1aa" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle} numberOfLines={1}>{meal.name}</Text>
+        <Text className="text-white font-medium text-lg flex-1 truncate">{meal.name}</Text>
       </View>
 
-      <ScrollView ref={scrollViewRef} style={styles.scroll} contentContainerStyle={{ padding: 24, paddingBottom: 48 }}>
-        {/* Meal Info */}
-        <View style={styles.statsRow}>
-          <View style={styles.stat}><Clock color="#a1a1aa" size={16} /><Text style={styles.statText}>{meal.prepTime || 15} min</Text></View>
-          <View style={styles.stat}><ChefHat color="#a1a1aa" size={16} /><Text style={styles.statText}>{meal.difficulty || 'Easy'}</Text></View>
-          <View style={styles.stat}><Flame color="#fb923c" size={16} /><Text style={styles.statText}>{meal.calories} kcal</Text></View>
-        </View>
-
-        <View style={styles.macrosRow}>
-          <View style={[styles.macroBadge, {borderColor: '#1e3a8a', backgroundColor: '#172554'}]}><Text style={[styles.macroBadgeText, {color: '#60a5fa'}]}>{meal.macros?.protein}g Pro</Text></View>
-          <View style={[styles.macroBadge, {borderColor: '#064e3b', backgroundColor: '#022c22'}]}><Text style={[styles.macroBadgeText, {color: '#34d399'}]}>{meal.macros?.carbs}g Carbs</Text></View>
-          <View style={[styles.macroBadge, {borderColor: '#78350f', backgroundColor: '#451a03'}]}><Text style={[styles.macroBadgeText, {color: '#fbbf24'}]}>{meal.macros?.fats}g Fats</Text></View>
-        </View>
-
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Ingredients</Text>
-          {meal.ingredients?.map((ing: string, i: number) => {
-            const portion = meal.portionSizes?.[ing] || '';
-            return (
-              <View key={i} style={styles.ingRow}>
-                <View style={styles.dot} />
-                <Text style={styles.ingText}>{ing} {portion ? `- ${portion}` : ''}</Text>
-              </View>
-            );
-          })}
-        </View>
-
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Instructions</Text>
-          {meal.recipeSteps && meal.recipeSteps.length > 0 ? (
-            meal.recipeSteps.map((step: string, i: number) => (
-              <View key={i} style={{ marginBottom: 12 }}>
-                <Text style={styles.instText}>{step}</Text>
-              </View>
-            ))
-          ) : (
-            <Text style={styles.instText}>{meal.description}</Text>
-          )}
-        </View>
-
-        {/* Chat Section */}
-        <View style={styles.chatHeader}>
-          <ChefHat color="#10b981" size={20} />
-          <Text style={styles.chatTitle}>Cooking Assistant</Text>
-        </View>
-        
-        {messages.length === 0 && (
-          <Text style={styles.chatEmpty}>Hi! Ask me about substitutions, allergies, or prep steps for this meal.</Text>
-        )}
-
-        {messages.map((m, i) => (
-          <View key={i} style={[styles.msgRow, m.role === 'user' ? styles.msgRight : styles.msgLeft]}>
-            {m.role === 'assistant' && <View style={styles.botAvatar}><Bot color="#10b981" size={14} /></View>}
-            <View style={[styles.msgBubble, m.role === 'user' ? styles.bubbleUser : styles.bubbleBot]}>
-              <Text style={styles.msgText}>{m.content}</Text>
+      <KeyboardAvoidingView 
+        style={{ flex: 1 }} 
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <ScrollView className="flex-1" contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
+          
+          <Text className="text-3xl font-semibold tracking-tight text-white mb-2">{meal.name}</Text>
+          
+          <View className="flex-row items-center gap-4 text-zinc-400 mb-6 flex-wrap">
+            <View className="flex-row items-center gap-1">
+              <Clock size={14} color="#a1a1aa" />
+              <Text className="text-zinc-400 text-sm">{meal.prepTime || 15} min prep</Text>
+            </View>
+            <View className="flex-row items-center gap-1">
+              <ChefHat size={14} color="#a1a1aa" />
+              <Text className="text-zinc-400 text-sm">{meal.difficulty || 'Easy'}</Text>
+            </View>
+            <View className="flex-row items-center gap-1">
+              <Flame size={14} color="#fb923c" />
+              <Text className="text-orange-400 text-sm">{meal.calories} kcal</Text>
             </View>
           </View>
-        ))}
-        {chatLoading && (
-          <View style={[styles.msgRow, styles.msgLeft]}>
-            <View style={styles.botAvatar}><Bot color="#10b981" size={14} /></View>
-            <View style={styles.bubbleBot}><Text style={styles.msgText}>Thinking...</Text></View>
-          </View>
-        )}
-      </ScrollView>
 
-      {/* Input Field */}
-      <View style={styles.inputArea}>
-        <TouchableOpacity 
-          style={[styles.micBtn, isRecording && styles.micBtnActive]} 
-          onPress={handleVoiceToggle}
-        >
-          <Mic color={isRecording ? "#fff" : "#a1a1aa"} size={20} />
-        </TouchableOpacity>
-        <TextInput 
-          style={styles.input}
-          value={input}
-          onChangeText={setInput}
-          placeholder="Ask or tap mic to speak..."
-          placeholderTextColor="#71717a"
-        />
-        <TouchableOpacity style={styles.sendBtn} onPress={handleSendMessage} disabled={!input.trim() || chatLoading}>
-          <Send color="#000" size={18} />
-        </TouchableOpacity>
-      </View>
-    </KeyboardAvoidingView>
+          <View className="flex-row gap-2 mb-6 flex-wrap">
+            <View className="px-4 py-2 bg-blue-900/20 rounded-lg border border-blue-900/50 items-center justify-center">
+              <Text className="text-blue-400 font-semibold">{meal.macros?.protein || 0}g</Text>
+              <Text className="text-blue-400 text-xs">Protein</Text>
+            </View>
+            <View className="px-4 py-2 bg-emerald-900/20 rounded-lg border border-emerald-900/50 items-center justify-center">
+              <Text className="text-emerald-400 font-semibold">{meal.macros?.carbs || 0}g</Text>
+              <Text className="text-emerald-400 text-xs">Carbs</Text>
+            </View>
+            <View className="px-4 py-2 bg-yellow-900/20 rounded-lg border border-yellow-900/50 items-center justify-center">
+              <Text className="text-yellow-400 font-semibold">{meal.macros?.fats || 0}g</Text>
+              <Text className="text-yellow-400 text-xs">Fats</Text>
+            </View>
+          </View>
+
+          {/* Ingredients */}
+          <View className="bg-zinc-950 border border-zinc-800 rounded-2xl p-5 mb-6">
+            <Text className="text-lg font-medium text-white mb-4">Ingredients</Text>
+            <View className="space-y-2">
+              {meal.ingredients?.map((ing: string, i: number) => {
+                const portion = meal.portionSizes?.[ing] || '';
+                return (
+                  <View key={i} className="flex-row items-center gap-3">
+                    <View className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                    <Text className="text-zinc-300">
+                      {ing} {portion ? `- ${portion}` : ''}
+                    </Text>
+                  </View>
+                );
+              })}
+            </View>
+          </View>
+
+          {/* Instructions */}
+          <View className="bg-zinc-950 border border-zinc-800 rounded-2xl p-5 mb-6">
+            <Text className="text-lg font-medium text-white mb-4">Instructions</Text>
+            {meal.recipeSteps && meal.recipeSteps.length > 0 ? (
+              <View className="space-y-4">
+                {meal.recipeSteps.map((step: string, i: number) => (
+                  <View key={i} className="flex-row items-start gap-3">
+                    <Text className="text-zinc-500 font-medium">{i + 1}.</Text>
+                    <Text className="text-zinc-300 leading-relaxed flex-1">{step}</Text>
+                  </View>
+                ))}
+              </View>
+            ) : (
+              <Text className="text-zinc-300 leading-relaxed">
+                {meal.description || "Simple assembly. Combine ingredients and serve immediately."}
+              </Text>
+            )}
+          </View>
+
+          {/* Chat Interface */}
+          <View className="bg-zinc-950 border border-zinc-800 rounded-2xl overflow-hidden min-h-[400px] flex-col">
+            <View className="p-4 border-b border-zinc-800 flex-row items-center gap-3 bg-zinc-900/50">
+              <View className="w-8 h-8 rounded-full bg-emerald-500/20 items-center justify-center">
+                <ChefHat size={16} color="#10b981" />
+              </View>
+              <View>
+                <Text className="font-medium text-white">Cooking Assistant</Text>
+                <Text className="text-xs text-zinc-500">Ask about substitutions or allergies</Text>
+              </View>
+            </View>
+
+            <ScrollView ref={scrollViewRef} className="flex-1 p-4 h-64">
+              {messages.length === 0 && (
+                <View className="items-center mt-8 opacity-50">
+                  <Bot size={32} color="#a1a1aa" />
+                  <Text className="text-center text-zinc-500 text-sm mt-2">
+                    Hi! I'm your dedicated cooking assistant for {meal.name}.{"\n"}
+                    Need any substitutions?
+                  </Text>
+                </View>
+              )}
+              {messages.map((m, i) => (
+                <View key={i} className={`flex-row mb-4 ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                  {m.role === 'assistant' && (
+                    <View className="w-8 h-8 rounded-full bg-zinc-800 items-center justify-center mr-2">
+                      <Bot size={14} color="#34d399" />
+                    </View>
+                  )}
+                  <View className={`p-3 rounded-2xl max-w-[80%] ${
+                    m.role === 'user' ? 'bg-emerald-600 rounded-tr-none' : 'bg-zinc-900 border border-zinc-800 rounded-tl-none'
+                  }`}>
+                    <Text className={m.role === 'user' ? 'text-white' : 'text-zinc-200'}>{m.content}</Text>
+                  </View>
+                </View>
+              ))}
+              {chatLoading && (
+                <View className="flex-row items-center mb-4">
+                  <View className="w-8 h-8 rounded-full bg-zinc-800 items-center justify-center mr-2">
+                    <Bot size={14} color="#34d399" />
+                  </View>
+                  <View className="p-3 rounded-2xl bg-zinc-900 border border-zinc-800 rounded-tl-none">
+                    <Text className="text-zinc-400">Thinking...</Text>
+                  </View>
+                </View>
+              )}
+            </ScrollView>
+
+            <View className="p-3 border-t border-zinc-800 bg-zinc-900/30 flex-row items-center gap-2">
+              <TouchableOpacity 
+                onPress={toggleVoiceMode}
+                className={`w-10 h-10 rounded-full items-center justify-center ${isVoiceMode ? 'bg-red-600' : 'bg-zinc-800'}`}
+              >
+                <Mic size={18} color={isVoiceMode ? "#fff" : "#a1a1aa"} />
+              </TouchableOpacity>
+              <View className="flex-1 relative justify-center">
+                <TextInput
+                  value={input}
+                  onChangeText={setInput}
+                  placeholder={isVoiceMode ? (isListening ? "Listening..." : "Voice mode active") : "Ask a question..."}
+                  placeholderTextColor="#71717a"
+                  className={`w-full bg-zinc-900 border border-zinc-800 rounded-full px-4 py-2.5 pr-10 ${isVoiceMode ? 'text-zinc-500' : 'text-white'}`}
+                  editable={!isVoiceMode}
+                  onSubmitEditing={() => handleSendMessage()}
+                />
+                <TouchableOpacity 
+                  className="absolute right-1 w-8 h-8 rounded-full bg-emerald-500 items-center justify-center disabled:opacity-50"
+                  disabled={!input.trim() || chatLoading}
+                  onPress={() => handleSendMessage()}
+                >
+                  <Send size={14} color="#000" />
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#000' },
-  center: { flex: 1, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' },
-  text: { color: '#a1a1aa' },
-  header: { flexDirection: 'row', alignItems: 'center', paddingTop: 60, paddingHorizontal: 24, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: '#27272a' },
-  backBtn: { marginRight: 16 },
-  headerTitle: { color: '#fff', fontSize: 18, fontWeight: 'bold', flex: 1 },
-  scroll: { flex: 1 },
-  statsRow: { flexDirection: 'row', gap: 16, marginBottom: 16 },
-  stat: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  statText: { color: '#a1a1aa', fontSize: 14 },
-  macrosRow: { flexDirection: 'row', gap: 8, marginBottom: 24 },
-  macroBadge: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, borderWidth: 1 },
-  macroBadgeText: { fontSize: 12, fontWeight: 'bold' },
-  card: { backgroundColor: '#18181b', padding: 20, borderRadius: 20, borderWidth: 1, borderColor: '#27272a', marginBottom: 16 },
-  cardTitle: { color: '#fff', fontSize: 18, fontWeight: 'bold', marginBottom: 12 },
-  ingRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 8 },
-  dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#10b981' },
-  ingText: { color: '#d4d4d8', fontSize: 15 },
-  instText: { color: '#d4d4d8', fontSize: 15, lineHeight: 24 },
-  
-  chatHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 24, marginBottom: 16 },
-  chatTitle: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
-  chatEmpty: { color: '#71717a', fontSize: 14, textAlign: 'center', marginVertical: 16 },
-  msgRow: { flexDirection: 'row', marginBottom: 12, width: '100%' },
-  msgLeft: { justifyContent: 'flex-start' },
-  msgRight: { justifyContent: 'flex-end' },
-  botAvatar: { width: 28, height: 28, borderRadius: 14, backgroundColor: '#18181b', alignItems: 'center', justifyContent: 'center', marginRight: 8, borderWidth: 1, borderColor: '#27272a' },
-  msgBubble: { maxWidth: '80%', padding: 12, borderRadius: 16 },
-  bubbleUser: { backgroundColor: '#10b981', borderBottomRightRadius: 4 },
-  bubbleBot: { backgroundColor: '#18181b', borderWidth: 1, borderColor: '#27272a', borderBottomLeftRadius: 4 },
-  msgText: { color: '#fff', fontSize: 15, lineHeight: 22 },
-  
-  inputArea: { flexDirection: 'row', padding: 16, backgroundColor: '#18181b', borderTopWidth: 1, borderTopColor: '#27272a', alignItems: 'center', gap: 12 },
-  micBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#27272a', alignItems: 'center', justifyContent: 'center' },
-  micBtnActive: { backgroundColor: '#ef4444' },
-  input: { flex: 1, backgroundColor: '#000', borderWidth: 1, borderColor: '#27272a', borderRadius: 24, color: '#fff', paddingHorizontal: 16, height: 48, fontSize: 15 },
-  sendBtn: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#10b981', alignItems: 'center', justifyContent: 'center' }
-});

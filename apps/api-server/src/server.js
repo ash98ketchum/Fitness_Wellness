@@ -11,9 +11,11 @@ app.use(express.json());
 // Routes
 const planRoutes = require('./routes/plans');
 const agentRoutes = require('./routes/agents');
+const progressRoutes = require('./routes/progress');
 
 app.use('/api/v1/plans', planRoutes);
 app.use('/api/v1/agents', agentRoutes);
+app.use('/api/v1/progress', progressRoutes);
 
 // Mock Auth Routes for Testing
 app.post('/api/v1/auth/signup', (req, res) => {

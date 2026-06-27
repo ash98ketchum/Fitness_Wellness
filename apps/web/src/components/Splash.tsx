@@ -31,7 +31,7 @@ export function Splash({ onComplete }: { onComplete: () => void }) {
             <div className="w-16 h-16 rounded-xl bg-white text-black flex items-center justify-center shadow-[0_0_40px_rgba(255,255,255,0.3)]">
               <Activity size={32} />
             </div>
-            <h1 className="text-2xl font-bold tracking-widest text-white uppercase">LuminaFit</h1>
+            <h1 className="text-2xl font-bold tracking-widest text-white uppercase">Athelya</h1>
           </motion.div>
         </motion.div>
       )}

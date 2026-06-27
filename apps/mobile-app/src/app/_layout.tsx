@@ -1,56 +1,24 @@
-import { Stack, useRouter, useSegments } from 'expo-router';
-import { AuthProvider, useAuth } from '../contexts/AuthContext';
-import { StatusBar } from 'expo-status-bar';
-import { useEffect } from 'react';
-import { View, ActivityIndicator } from 'react-native';
+import '../../global.css'; // NativeWind global css
+import { Slot } from 'expo-router';
+import { AuthProvider } from '../contexts/AuthContext';
+import { View, ActivityIndicator, LogBox } from 'react-native';
 
-function RootNavigation() {
-  const { token, user, isLoading } = useAuth();
-  const segments = useSegments();
-  const router = useRouter();
-
-  useEffect(() => {
-    if (isLoading) return;
-
-    const inAuthGroup = segments[0] === '(auth)';
-    
-    if (!token && !inAuthGroup && segments[0] !== '' && segments[0] !== undefined) {
-      router.replace('/(auth)/login');
-    } else if (token) {
-      if ((user as any)?.onboardingCompleted === false) {
-         if (segments[0] !== 'onboarding') {
-           router.replace('/onboarding');
-         }
-      } else {
-         if (inAuthGroup || segments[0] === '' || segments[0] === 'onboarding' || segments[0] === undefined) {
-           router.replace('/(app)/dashboard');
-         }
-      }
+// Suppress the useless "props.pointerEvents is deprecated" warning in React Native Web
+LogBox.ignoreLogs(['props.pointerEvents is deprecated', 'Warning: props.pointerEvents is deprecated']);
+if (typeof window !== 'undefined') {
+  const originalWarn = console.warn;
+  console.warn = (...args) => {
+    if (args[0] && typeof args[0] === 'string' && args[0].includes('pointerEvents is deprecated')) {
+      return;
     }
-  }, [token, user, isLoading, segments]);
-
-  if (isLoading) {
-    return (
-      <View style={{ flex: 1, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator color="#10b981" size="large" />
-      </View>
-    );
-  }
-
-  return (
-    <Stack screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-      <Stack.Screen name="(app)" options={{ headerShown: false }} />
-      <Stack.Screen name="onboarding" options={{ headerShown: false }} />
-    </Stack>
-  );
+    originalWarn(...args);
+  };
 }
 
 export default function RootLayout() {
   return (
     <AuthProvider>
-      <RootNavigation />
-      <StatusBar style="light" />
+      <Slot />
     </AuthProvider>
   );
 }

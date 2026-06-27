@@ -18,15 +18,15 @@ interface PlannerMeal {
 
 type WeekPlan = Record<string, Record<string, PlannerMeal>>;
 
-const generateMockPlan = (): WeekPlan => {
+const generateEmptyPlan = (): WeekPlan => {
   const plan: WeekPlan = {};
   DAYS.forEach(day => {
     plan[day] = {};
     MEAL_TYPES.forEach(type => {
       plan[day][type] = {
         id: `${day}-${type}`,
-        name: type === 'Breakfast' ? 'Oatmeal & Eggs' : type === 'Lunch' ? 'Chicken Salad' : type === 'Dinner' ? 'Salmon & Quinoa' : 'Protein Shake',
-        calories: type === 'Snacks' ? 250 : 500,
+        name: 'Unplanned Meal',
+        calories: 0,
         completed: false,
       };
     });
@@ -35,11 +35,53 @@ const generateMockPlan = (): WeekPlan => {
 };
 
 export default function Planner() {
-  const { user, logout } = useAuth();
+  const { user, token, logout } = useAuth();
   const navigate = useNavigate();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [weekPlan, setWeekPlan] = useState<WeekPlan>(generateMockPlan());
-  
+  const [weekPlan, setWeekPlan] = useState<WeekPlan>(generateEmptyPlan());
+  const [loading, setLoading] = useState(true);
+
+  React.useEffect(() => {
+    const fetchPlan = async () => {
+      try {
+        const response = await fetch('http://localhost:3000/api/v1/plans/latest', {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (response.ok) {
+          const data = await response.json();
+          const meals = data.plan?.meals || [];
+          
+          const mappedMeals: Record<string, PlannerMeal> = {
+            Breakfast: { id: 'bk', name: meals[0]?.name || 'Breakfast', calories: meals[0]?.calories || 0, completed: false },
+            Lunch: { id: 'ln', name: meals[1]?.name || 'Lunch', calories: meals[1]?.calories || 0, completed: false },
+            Dinner: { id: 'dn', name: meals[2]?.name || 'Dinner', calories: meals[2]?.calories || 0, completed: false },
+            Snacks: { id: 'sn', name: meals[3]?.name || 'Snacks', calories: meals[3]?.calories || 0, completed: false },
+          };
+
+          const newPlan: WeekPlan = {};
+          DAYS.forEach(day => {
+            newPlan[day] = {};
+            MEAL_TYPES.forEach(type => {
+              newPlan[day][type] = {
+                ...mappedMeals[type],
+                id: `${day}-${type}`,
+              };
+            });
+          });
+          setWeekPlan(newPlan);
+        }
+      } catch (error) {
+        console.error(error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    if (token) {
+      fetchPlan();
+    }
+  }, [token]);
+
   // Drag state
   const [draggedItem, setDraggedItem] = useState<{day: string, type: string} | null>(null);
 

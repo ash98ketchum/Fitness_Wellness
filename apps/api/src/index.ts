@@ -1,493 +1,64 @@
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
-import { PrismaClient } from '@prisma/client';
-import { generateDietPlan, chatWithDietician, chatWithCookingAssistant } from './groq';
+import path from 'path';
+
+import { initCronJobs } from './reflection';
+
+// Routers
+import authRoutes from './routes/auth.routes';
+import onboardingRoutes from './routes/onboarding.routes';
+import plansRoutes from './routes/plans.routes';
+import mealsRoutes from './routes/meals.routes';
+import workoutsRoutes from './routes/workouts.routes';
+import progressRoutes from './routes/progress.routes';
+import chatRoutes from './routes/chat.routes';
+import agentsRoutes from './routes/agents.routes';
+import dashboardRoutes from './routes/dashboard.routes';
+import eventsRoutes from './routes/events.routes';
 
 dotenv.config();
 
 const app = express();
 const port = process.env.PORT || 3000;
-const prisma = new PrismaClient();
-const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret';
 
 app.use(cors());
 app.use(express.json());
-
-// ─── Auth Middleware ──────────────────────────
-interface AuthRequest extends Request {
-  userId?: string;
-}
-
-function authMiddleware(req: AuthRequest, res: Response, next: NextFunction): void {
-  const header = req.headers.authorization;
-  if (!header?.startsWith('Bearer ')) {
-    res.status(401).json({ error: 'No token provided' });
-    return;
-  }
-  try {
-    const decoded = jwt.verify(header.split(' ')[1], JWT_SECRET) as { userId: string };
-    req.userId = decoded.userId;
-    next();
-  } catch {
-    res.status(401).json({ error: 'Invalid token' });
-  }
-}
+app.use(express.static(path.join(__dirname, '../public')));
 
 // ─── Health Check ─────────────────────────────
 app.get('/health', (_req: Request, res: Response) => {
-  res.json({ status: 'ok', service: 'luminafit-api' });
+  res.json({ status: 'ok', service: 'athelya-api' });
 });
 
-// ─── Auth: Signup ─────────────────────────────
-app.post('/api/v1/auth/signup', async (req: Request, res: Response) => {
-  try {
-    const { name, email, password } = req.body;
-    if (!name || !email || !password) {
-      res.status(400).json({ error: 'Name, email, and password are required' });
-      return;
-    }
+// ─── Apply Routes ─────────────────────────────
+app.use('/api/v1/auth', authRoutes);
+app.use('/api/v1/onboarding', onboardingRoutes);
+app.use('/api/v1/plans', plansRoutes);
+app.use('/api/v1/meals', mealsRoutes);
+app.use('/api/v1/workouts', workoutsRoutes);
+app.use('/api/v1/progress', progressRoutes);
+app.use('/api/v1/chat', chatRoutes); // /api/v1/chat is the base, but we also had /api/v1/agents/cooking in chatRoutes. Let's adjust chatRoutes mounting. Wait, in chatRoutes, it's defined as `/`, `/voice`, `/agents/cooking`. So mounting it at `/api/v1/chat` means the cooking route becomes `/api/v1/chat/agents/cooking`. That breaks the frontend.
+// Actually, let me map them manually to match exactly.
 
-    const existing = await prisma.user.findUnique({ where: { email } });
-    if (existing) {
-      res.status(409).json({ error: 'Email already registered' });
-      return;
-    }
+app.use('/api/v1/dashboard', dashboardRoutes);
+app.use('/api/v1/events', eventsRoutes);
 
-    const passwordHash = await bcrypt.hash(password, 12);
-    const user = await prisma.user.create({
-      data: { name, email, passwordHash },
-    });
-
-    const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '7d' });
-    res.status(201).json({
-      token,
-      user: { id: user.id, email: user.email, name: user.name },
-    });
-  } catch (err) {
-    console.error('Signup error:', err);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-// ─── Auth: Login ──────────────────────────────
-app.post('/api/v1/auth/login', async (req: Request, res: Response) => {
-  try {
-    const { email, password } = req.body;
-    if (!email || !password) {
-      res.status(400).json({ error: 'Email and password are required' });
-      return;
-    }
-
-    const user = await prisma.user.findUnique({ where: { email } });
-    if (!user) {
-      res.status(401).json({ error: 'Invalid credentials' });
-      return;
-    }
-
-    const valid = await bcrypt.compare(password, user.passwordHash);
-    if (!valid) {
-      res.status(401).json({ error: 'Invalid credentials' });
-      return;
-    }
-
-    const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '7d' });
-    res.json({
-      token,
-      user: { id: user.id, email: user.email, name: user.name },
-    });
-  } catch (err) {
-    console.error('Login error:', err);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-// ─── Onboarding: Save Profile ─────────────────
-app.post('/api/v1/onboarding', authMiddleware, async (req: AuthRequest, res: Response) => {
-  try {
-    const data = req.body;
-    const userId = req.userId!;
-
-    const personalInfo = JSON.stringify({
-      age: data.age,
-      gender: data.gender,
-      weight: data.weight,
-      height: data.height,
-      bodyFatPct: data.bodyFatPct,
-      activityLevel: data.activityLevel,
-    });
-
-    const fitnessGoals = JSON.stringify({
-      goal: data.goal,
-      targetWeight: data.targetWeight,
-      targetBodyFat: data.targetBodyFat,
-      timeframe: data.timeframe,
-    });
-
-    const foodPreferences = JSON.stringify({
-      dietPreference: data.dietPreference,
-      allergies: data.allergies,
-      dislikedFoods: data.dislikedFoods,
-    });
-
-    const lifestyle = JSON.stringify({
-      mealsPerDay: data.mealsPerDay,
-      cookingSkill: data.cookingSkill,
-      budget: data.budget,
-    });
-
-    const healthData = JSON.stringify({
-      waterIntake: data.waterIntake,
-      sleepHours: data.sleepHours,
-      stressLevel: data.stressLevel,
-      supplements: data.supplements,
-      medicalConditions: data.medicalConditions,
-    });
-
-    await prisma.onboardingProfile.upsert({
-      where: { userId },
-      create: { userId, personalInfo, fitnessGoals, foodPreferences, lifestyle, healthData },
-      update: { personalInfo, fitnessGoals, foodPreferences, lifestyle, healthData },
-    });
-
-    res.json({ success: true });
-  } catch (err) {
-    console.error('Onboarding error:', err);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-// ─── Plans: Generate ──────────────────────────
-app.post('/api/v1/plans/generate', authMiddleware, async (req: AuthRequest, res: Response) => {
-  try {
-    const userId = req.userId!;
-
-    // Get onboarding profile
-    const profile = await prisma.onboardingProfile.findUnique({ where: { userId } });
-    let profileData: any = {};
-    if (profile) {
-      const p = JSON.parse(profile.personalInfo);
-      const g = JSON.parse(profile.fitnessGoals);
-      const f = JSON.parse(profile.foodPreferences);
-      const l = JSON.parse(profile.lifestyle);
-      const h = JSON.parse(profile.healthData);
-      profileData = { ...p, ...g, ...f, ...l, ...h };
-    }
-
-    // Create plan record
-    const plan = await prisma.dietPlan.create({
-      data: { userId, status: 'GENERATING' },
-    });
-
-    // Run the multi-agent pipeline
-    const result = await generateDietPlan(profileData);
-
-    // Save meals
-    for (const meal of result.meals) {
-      await prisma.meal.create({
-        data: {
-          dietPlanId: plan.id,
-          name: meal.name,
-          description: meal.description,
-          time: meal.time,
-          calories: meal.calories,
-          macros: JSON.stringify(meal.macros),
-          ingredients: JSON.stringify(meal.ingredients),
-          prepTime: meal.prepTime,
-          difficulty: meal.difficulty,
-          portionSizes: JSON.stringify(meal.portionSizes || {}),
-          recipeSteps: JSON.stringify(meal.recipeSteps || []),
-        },
-      });
-    }
-
-    // Save verification report
-    await prisma.verificationReport.create({
-      data: {
-        dietPlanId: plan.id,
-        confidenceScore: result.confidenceScore,
-        issuesFound: JSON.stringify(result.issuesFound),
-        correctionsApplied: JSON.stringify([result.aiInsight, ...result.correctionsApplied]),
-        agent1Raw: result.agent1Raw,
-        agent2Raw: result.agent2Raw,
-        agent3Raw: result.agent3Raw,
-      },
-    });
-
-    // Update plan status and macros
-    await prisma.dietPlan.update({
-      where: { id: plan.id },
-      data: {
-        status: 'READY',
-        totalCalories: result.totalCalories,
-        proteinG: result.proteinG,
-        carbsG: result.carbsG,
-        fatsG: result.fatsG,
-      },
-    });
-
-    res.json({ planId: plan.id, status: 'READY' });
-  } catch (err) {
-    console.error('Plan generation error:', err);
-    res.status(500).json({ error: 'Plan generation failed' });
-  }
-});
-
-// ─── Plans: Get Latest ────────────────────────
-app.get('/api/v1/plans/latest', authMiddleware, async (req: AuthRequest, res: Response) => {
-  try {
-    const userId = req.userId!;
-    const plan = await prisma.dietPlan.findFirst({
-      where: { userId },
-      orderBy: { createdAt: 'desc' },
-      include: {
-        meals: true,
-        verificationReport: true,
-      },
-    });
-
-    if (!plan) {
-      res.status(404).json({ error: 'No plan found' });
-      return;
-    }
-
-    // Parse JSON fields for meals
-    const meals = plan.meals.map(m => ({
-      ...m,
-      macros: JSON.parse(m.macros),
-      ingredients: JSON.parse(m.ingredients),
-      portionSizes: m.portionSizes ? JSON.parse(m.portionSizes) : {},
-      recipeSteps: m.recipeSteps ? JSON.parse(m.recipeSteps) : [],
-    }));
-
-    const verificationReport = plan.verificationReport ? {
-      ...plan.verificationReport,
-      issuesFound: JSON.parse(plan.verificationReport.issuesFound),
-      correctionsApplied: JSON.parse(plan.verificationReport.correctionsApplied),
-    } : null;
-
-    res.json({
-      plan: {
-        ...plan,
-        meals,
-        verificationReport,
-      },
-    });
-  } catch (err) {
-    console.error('Fetch plan error:', err);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-// ─── Meals: Get Single Meal ───────────────────
-app.get('/api/v1/meals/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
-  try {
-    const mealId = req.params.id as string;
-    const meal = await prisma.meal.findUnique({
-      where: { id: mealId },
-      include: { dietPlan: true }
-    }) as any;
-
-    if (!meal || meal.dietPlan.userId !== req.userId) {
-      res.status(404).json({ error: 'Meal not found' });
-      return;
-    }
-
-    res.json({
-      meal: {
-        ...meal,
-        macros: JSON.parse(meal.macros),
-        ingredients: JSON.parse(meal.ingredients),
-        portionSizes: meal.portionSizes ? JSON.parse(meal.portionSizes) : {},
-        recipeSteps: meal.recipeSteps ? JSON.parse(meal.recipeSteps) : [],
-      }
-    });
-  } catch (err) {
-    console.error('Fetch meal error:', err);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-// ─── Onboarding: Get Profile ─────────────────
-app.get('/api/v1/onboarding/me', authMiddleware, async (req: AuthRequest, res: Response) => {
-  try {
-    const userId = req.userId!;
-    const profile = await prisma.onboardingProfile.findUnique({ where: { userId } });
-    if (!profile) {
-      res.status(404).json({ error: 'Profile not found' });
-      return;
-    }
-    res.json({ profile });
-  } catch (err) {
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-// ─── Chatbot ──────────────────────────────────
-app.post('/api/v1/chat', authMiddleware, async (req: AuthRequest, res: Response) => {
-  try {
-    const userId = req.userId!;
-    const { messages } = req.body;
-
-    if (!messages || !Array.isArray(messages)) {
-      res.status(400).json({ error: 'Messages array is required' });
-      return;
-    }
-
-    const profile = await prisma.onboardingProfile.findUnique({ where: { userId } });
-    const plan = await prisma.dietPlan.findFirst({
-      where: { userId },
-      orderBy: { createdAt: 'desc' },
-      include: { meals: true },
-    });
-
-    let profileData: any = {};
-    if (profile) {
-      const p = JSON.parse(profile.personalInfo);
-      const g = JSON.parse(profile.fitnessGoals);
-      const f = JSON.parse(profile.foodPreferences);
-      const l = JSON.parse(profile.lifestyle);
-      const h = JSON.parse(profile.healthData);
-      profileData = { ...p, ...g, ...f, ...l, ...h };
-    }
-
-    const reply = await chatWithDietician(messages, profileData, plan || {});
-    res.json({ reply });
-  } catch (err) {
-    console.error('Chat error:', err);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-// ─── Cooking Assistant ────────────────────────
-app.post('/api/v1/agents/cooking', authMiddleware, async (req: AuthRequest, res: Response) => {
-  try {
-    const userId = req.userId!;
-    const { messages, mealId } = req.body;
-
-    if (!messages || !Array.isArray(messages) || !mealId) {
-      res.status(400).json({ error: 'Messages array and mealId are required' });
-      return;
-    }
-
-    const meal = await prisma.meal.findUnique({
-      where: { id: mealId },
-    });
-
-    if (!meal) {
-      res.status(404).json({ error: 'Meal not found' });
-      return;
-    }
-
-    const profile = await prisma.onboardingProfile.findUnique({ where: { userId } });
-    let profileData: any = {};
-    if (profile) {
-      const p = JSON.parse(profile.personalInfo);
-      const g = JSON.parse(profile.fitnessGoals);
-      const f = JSON.parse(profile.foodPreferences);
-      const l = JSON.parse(profile.lifestyle);
-      const h = JSON.parse(profile.healthData);
-      profileData = { ...p, ...g, ...f, ...l, ...h };
-    }
-
-    const mealData = {
-      name: meal.name,
-      time: meal.time,
-      calories: meal.calories,
-      macros: JSON.parse(meal.macros),
-      ingredients: JSON.parse(meal.ingredients),
-      description: meal.description,
-      prepTime: meal.prepTime,
-      difficulty: meal.difficulty,
-      portionSizes: meal.portionSizes ? JSON.parse(meal.portionSizes) : {},
-      recipeSteps: meal.recipeSteps ? JSON.parse(meal.recipeSteps) : [],
-    };
-
-    const reply = await chatWithCookingAssistant(messages, mealData, profileData);
-    res.json({ reply });
-  } catch (err) {
-    console.error('Cooking Chat error:', err);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-// ─── Goal Tracker: Progress ─────────────────
-app.get('/api/v1/progress/today', authMiddleware, async (req: AuthRequest, res: Response) => {
-  try {
-    const userId = req.userId!;
-    const date = new Date().toISOString().split('T')[0];
-
-    let progress = await prisma.dailyProgress.findUnique({
-      where: { userId_date: { userId, date } }
-    });
-
-    if (!progress) {
-      // Find active diet plan total calories
-      const plan = await prisma.dietPlan.findFirst({
-        where: { userId, status: 'READY' },
-        orderBy: { createdAt: 'desc' },
-      });
-      const targetCalories = plan?.totalCalories || 2000;
-      progress = await prisma.dailyProgress.create({
-        data: { userId, date, caloriesConsumed: 0, caloriesRemaining: targetCalories }
-      });
-    }
-
-    // Get today's logs
-    const mealLogs = await prisma.mealLog.findMany({
-      where: { userId, createdAt: { gte: new Date(date) } },
-      include: { meal: true }
-    });
-
-    res.json({ progress, mealLogs });
-  } catch (err) {
-    console.error('Progress error:', err);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-app.post('/api/v1/progress/log', authMiddleware, async (req: AuthRequest, res: Response) => {
-  try {
-    const userId = req.userId!;
-    const { mealId } = req.body;
-    const date = new Date().toISOString().split('T')[0];
-
-    const meal = await prisma.meal.findUnique({ where: { id: mealId } });
-    if (!meal) {
-      res.status(404).json({ error: 'Meal not found' });
-      return;
-    }
-
-    // Create log
-    const log = await prisma.mealLog.create({
-      data: { userId, mealId, status: 'COMPLETED' }
-    });
-
-    // Update Daily Progress
-    let progress = await prisma.dailyProgress.findUnique({
-      where: { userId_date: { userId, date } }
-    });
-
-    if (progress) {
-      await prisma.dailyProgress.update({
-        where: { id: progress.id },
-        data: {
-          caloriesConsumed: progress.caloriesConsumed + meal.calories,
-          caloriesRemaining: Math.max(0, progress.caloriesRemaining - meal.calories)
-        }
-      });
-    }
-
-    res.json({ success: true, log });
-  } catch (err) {
-    console.error('Log error:', err);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
+// For chat/agents:
+app.use('/api/v1/chat', chatRoutes);
+app.use('/api/v1/agents', agentsRoutes);
 
 // ─── Start Server ─────────────────────────────
+app.use((err: any, req: Request, res: Response, next: NextFunction) => {
+  console.error('Global Error Handler caught:', err);
+  if (err instanceof SyntaxError && 'body' in err) {
+    res.status(400).json({ error: 'Bad JSON format in request body', details: err.message });
+  } else {
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
 app.listen(port, () => {
-  console.log(`✓ LuminaFit API running on http://localhost:${port}`);
+  console.log(`✓ Athelya API running on http://localhost:${port}`);
+  initCronJobs();
 });

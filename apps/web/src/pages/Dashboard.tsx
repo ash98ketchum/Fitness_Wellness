@@ -104,7 +104,7 @@ export default function Dashboard() {
           <div className="w-6 h-6 rounded bg-white text-black flex items-center justify-center">
             <Activity size={16} />
           </div>
-          LuminaFit
+          Athelya
         </div>
         
         <nav className="flex-1 space-y-2 text-sm font-medium">

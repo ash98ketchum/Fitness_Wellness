@@ -1,111 +1,109 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, KeyboardAvoidingView, Platform, Alert, ScrollView } from 'react-native';
-import { Input } from '../../components/ui/Input';
-import { Button } from '../../components/ui/Button';
+import { View, Text, TextInput, TouchableOpacity, SafeAreaView, ActivityIndicator } from 'react-native';
+import { useRouter, Link } from 'expo-router';
 import { useAuth } from '../../contexts/AuthContext';
-import { API_URL } from '../../constants/api';
-import { useRouter } from 'expo-router';
-import { Dumbbell } from 'lucide-react-native';
+import { Activity } from 'lucide-react-native';
+import { StatusBar } from 'expo-status-bar';
 
-export default function LoginScreen() {
+export default function Login() {
+  const router = useRouter();
+  const { login } = useAuth();
+  
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const { login } = useAuth();
-  const router = useRouter();
 
-  const handleLogin = async () => {
-    if (!email || !password) {
-      Alert.alert('Error', 'Please fill in all fields');
-      return;
-    }
-
+  const handleSubmit = async () => {
+    setError('');
     setLoading(true);
     try {
-      const response = await fetch(`${API_URL}/auth/login`, {
+      const res = await fetch('http://localhost:3000/api/v1/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email, password })
       });
-
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error || 'Login failed');
-      }
-
-      await login(data.token, data.user);
-      if (data.user?.onboardingCompleted === false) {
-        router.replace('/onboarding');
-      } else {
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Invalid credentials');
+      
+      await login(data.user, data.token);
+      if (data.user.hasCompletedOnboarding) {
         router.replace('/(app)/dashboard');
+      } else {
+        router.replace('/onboarding');
       }
-    } catch (error: any) {
-      Alert.alert('Login Failed', error.message);
+    } catch (err: any) {
+      setError(err.message || 'Invalid credentials');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <KeyboardAvoidingView 
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
-      style={styles.container}
-    >
-      <ScrollView contentContainerStyle={styles.scroll}>
-        <View style={styles.header}>
-          <View style={styles.logoBox}>
-            <Dumbbell color="#10b981" size={32} />
-          </View>
-          <Text style={styles.title}>Welcome back</Text>
-          <Text style={styles.subtitle}>Enter your details to access your dashboard</Text>
+    <View className="flex-1 bg-black justify-center items-center">
+      <StatusBar style="light" />
+      
+      <View className="w-full max-w-sm px-6">
+        <View className="items-center mb-6">
+          <TouchableOpacity 
+            className="w-10 h-10 rounded-lg bg-white items-center justify-center mb-6"
+            onPress={() => router.replace('/')}
+          >
+            <Activity size={24} color="#000" />
+          </TouchableOpacity>
+          <Text className="text-3xl font-semibold tracking-tight text-white mb-2">Sign in to your account</Text>
+          <Text className="text-sm text-zinc-400">
+            Don't have an account?{' '}
+            <Link href="/(auth)/signup" className="font-medium text-white">Sign up</Link>
+          </Text>
         </View>
 
-        <View style={styles.form}>
-          <Input
-            label="Email"
-            placeholder="you@example.com"
-            value={email}
-            onChangeText={setEmail}
-            autoCapitalize="none"
-            keyboardType="email-address"
-          />
-          <Input
-            label="Password"
-            placeholder="••••••••"
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-          />
+        <View className="bg-zinc-950 border border-zinc-800 rounded-3xl p-6 shadow-xl">
+          <View className="space-y-5">
+            <View className="mb-4">
+              <Text className="text-sm font-medium text-zinc-300 mb-1.5">Email address</Text>
+              <TextInput 
+                className="w-full px-3 py-2.5 bg-zinc-900 border border-zinc-700 rounded-lg text-white placeholder:text-zinc-500 focus:border-zinc-500"
+                placeholder="name@example.com"
+                placeholderTextColor="#71717a"
+                keyboardType="email-address"
+                autoCapitalize="none"
+                value={email}
+                onChangeText={setEmail}
+              />
+            </View>
+            <View className="mb-6">
+              <Text className="text-sm font-medium text-zinc-300 mb-1.5">Password</Text>
+              <TextInput 
+                className="w-full px-3 py-2.5 bg-zinc-900 border border-zinc-700 rounded-lg text-white placeholder:text-zinc-500 focus:border-zinc-500"
+                placeholder="••••••••"
+                placeholderTextColor="#71717a"
+                secureTextEntry
+                value={password}
+                onChangeText={setPassword}
+              />
+            </View>
 
-          <Button 
-            title="Sign In" 
-            onPress={handleLogin} 
-            isLoading={loading}
-            style={styles.submitBtn}
-          />
-          
-          <View style={styles.footer}>
-            <Text style={styles.footerText}>Don't have an account? </Text>
-            <Text style={styles.link} onPress={() => router.push('/(auth)/signup')}>
-              Sign up
-            </Text>
+            {error ? (
+              <View className="bg-red-900/20 border border-red-900/50 rounded-lg px-4 py-2 mb-4">
+                <Text className="text-sm text-red-400">{error}</Text>
+              </View>
+            ) : null}
+
+            <TouchableOpacity 
+              className="w-full bg-white flex-row items-center justify-center py-3 rounded-lg"
+              onPress={handleSubmit}
+              disabled={loading}
+            >
+              {loading ? (
+                <ActivityIndicator color="#000" />
+              ) : (
+                <Text className="text-black font-medium text-sm">Sign in</Text>
+              )}
+            </TouchableOpacity>
           </View>
         </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+      </View>
+    </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#000000' },
-  scroll: { flexGrow: 1, justifyContent: 'center', padding: 24 },
-  header: { alignItems: 'center', marginBottom: 48 },
-  logoBox: { width: 64, height: 64, borderRadius: 16, backgroundColor: '#18181b', alignItems: 'center', justifyContent: 'center', marginBottom: 24, borderWidth: 1, borderColor: '#27272a' },
-  title: { fontSize: 28, fontWeight: 'bold', color: '#ffffff', marginBottom: 8 },
-  subtitle: { fontSize: 16, color: '#a1a1aa', textAlign: 'center' },
-  form: { width: '100%' },
-  submitBtn: { marginTop: 16, marginBottom: 24 },
-  footer: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center' },
-  footerText: { color: '#a1a1aa', fontSize: 14 },
-  link: { color: '#10b981', fontSize: 14, fontWeight: '600' }
-});

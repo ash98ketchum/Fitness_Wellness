@@ -1,79 +1,109 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useRouter, useSegments, usePathname } from 'expo-router';
 
-interface User {
+type User = {
   id: string;
   email: string;
   name: string;
-}
+  hasCompletedOnboarding: boolean;
+};
 
-interface AuthContextType {
-  token: string | null;
+type AuthContextType = {
   user: User | null;
-  isLoading: boolean;
-  login: (token: string, user: User) => Promise<void>;
+  token: string | null;
+  login: (userData: User, token: string) => Promise<void>;
   logout: () => Promise<void>;
-}
+  updateUser: (data: Partial<User>) => Promise<void>;
+  isLoading: boolean;
+};
 
-const AuthContext = createContext<AuthContextType | null>(null);
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [token, setToken] = useState<string | null>(null);
   const [user, setUser] = useState<User | null>(null);
+  const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const segments = useSegments();
+  const pathname = usePathname();
+  const router = useRouter();
 
   useEffect(() => {
-    async function loadStoredAuth() {
-      try {
-        const storedToken = await AsyncStorage.getItem('token');
-        const storedUser = await AsyncStorage.getItem('user');
-        
-        if (storedToken && storedUser) {
-          setToken(storedToken);
-          setUser(JSON.parse(storedUser));
-        }
-      } catch (error) {
-        console.error('Failed to load auth state', error);
-      } finally {
-        setIsLoading(false);
-      }
-    }
-    loadStoredAuth();
+    loadUser();
   }, []);
 
-  const login = async (newToken: string, newUser: User) => {
+  useEffect(() => {
+    if (isLoading) return;
+
+    const inAuthGroup = segments[0] === '(auth)';
+    const inAppGroup = segments[0] === '(app)';
+
+    if (!user && !inAuthGroup && pathname !== '/') {
+      // Redirect to landing if not logged in and not already there
+      router.replace('/');
+    } else if (user) {
+      // Allow users to see the landing page even if logged in
+      if (pathname === '/') return;
+
+      if (!user.hasCompletedOnboarding) {
+        // Stop the trap! Let the user access the login/signup pages even if they have an incomplete session
+        if (!inAuthGroup && pathname !== '/onboarding') {
+          router.replace('/onboarding');
+        }
+      } else if (user.hasCompletedOnboarding && inAuthGroup) {
+        router.replace('/(app)/dashboard');
+      }
+    }
+  }, [user, segments, pathname, isLoading]);
+
+  const loadUser = async () => {
     try {
-      await AsyncStorage.setItem('token', newToken);
-      await AsyncStorage.setItem('user', JSON.stringify(newUser));
-      setToken(newToken);
-      setUser(newUser);
-    } catch (error) {
-      console.error('Failed to store auth state', error);
+      const storedUser = await AsyncStorage.getItem('user');
+      const storedToken = await AsyncStorage.getItem('token');
+      if (storedUser && storedToken) {
+        setUser(JSON.parse(storedUser));
+        setToken(storedToken);
+      }
+    } catch (e) {
+      console.error('Failed to load user', e);
+    } finally {
+      setIsLoading(false);
     }
   };
 
+  const login = async (userData: User, tokenStr: string) => {
+    setUser(userData);
+    setToken(tokenStr);
+    await AsyncStorage.setItem('user', JSON.stringify(userData));
+    await AsyncStorage.setItem('token', tokenStr);
+  };
+
   const logout = async () => {
-    try {
-      await AsyncStorage.removeItem('token');
-      await AsyncStorage.removeItem('user');
-      setToken(null);
-      setUser(null);
-    } catch (error) {
-      console.error('Failed to clear auth state', error);
+    setUser(null);
+    setToken(null);
+    await AsyncStorage.removeItem('user');
+    await AsyncStorage.removeItem('token');
+  };
+
+  const updateUser = async (data: Partial<User>) => {
+    if (user) {
+      const updated = { ...user, ...data };
+      setUser(updated);
+      await AsyncStorage.setItem('user', JSON.stringify(updated));
     }
   };
 
   return (
-    <AuthContext.Provider value={{ token, user, isLoading, login, logout }}>
+    <AuthContext.Provider value={{ user, token, login, logout, updateUser, isLoading }}>
       {children}
     </AuthContext.Provider>
   );
 }
 
-export const useAuth = () => {
+export function useAuth() {
   const context = useContext(AuthContext);
-  if (!context) {
+  if (context === undefined) {
     throw new Error('useAuth must be used within an AuthProvider');
   }
   return context;
-};
+}

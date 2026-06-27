@@ -26,8 +26,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const storedToken = localStorage.getItem('luminafit_token');
-    const storedUser = localStorage.getItem('luminafit_user');
+    const storedToken = localStorage.getItem('athelya_token');
+    const storedUser = localStorage.getItem('athelya_user');
     if (storedToken && storedUser) {
       setToken(storedToken);
       setUser(JSON.parse(storedUser));
@@ -48,8 +48,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const data = await res.json();
     setToken(data.token);
     setUser(data.user);
-    localStorage.setItem('luminafit_token', data.token);
-    localStorage.setItem('luminafit_user', JSON.stringify(data.user));
+    localStorage.setItem('athelya_token', data.token);
+    localStorage.setItem('athelya_user', JSON.stringify(data.user));
   };
 
   const signup = async (name: string, email: string, password: string) => {
@@ -65,15 +65,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const data = await res.json();
     setToken(data.token);
     setUser(data.user);
-    localStorage.setItem('luminafit_token', data.token);
-    localStorage.setItem('luminafit_user', JSON.stringify(data.user));
+    localStorage.setItem('athelya_token', data.token);
+    localStorage.setItem('athelya_user', JSON.stringify(data.user));
   };
 
   const logout = () => {
     setToken(null);
     setUser(null);
-    localStorage.removeItem('luminafit_token');
-    localStorage.removeItem('luminafit_user');
+    localStorage.removeItem('athelya_token');
+    localStorage.removeItem('athelya_user');
   };
 
   return (

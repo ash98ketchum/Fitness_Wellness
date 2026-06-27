@@ -16,7 +16,7 @@ export default function LoadingSequence() {
   const [activeStep, setActiveStep] = useState(0);
   const navigate = useNavigate();
   const location = useLocation();
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const hasStarted = useRef(false);
 
   useEffect(() => {
@@ -32,7 +32,7 @@ export default function LoadingSequence() {
           await fetch('http://localhost:3000/api/v1/onboarding', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-            body: JSON.stringify(formData),
+            body: JSON.stringify({ ...formData, email: user?.email, name: user?.name }),
           });
         }
         setActiveStep(1);

@@ -1,13 +1,13 @@
 import { motion } from 'framer-motion';
 import { Button } from '../components/ui/Button';
-import { ArrowRight, Activity, Cpu, ShieldCheck, Star, CheckCircle2, Plus, Minus } from 'lucide-react';
+import { ArrowRight, Activity, Cpu, ShieldCheck, Star, CheckCircle2, Plus, Minus, Mic, Database } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useState } from 'react';
 
 const testimonials = [
-  { name: "James Hartley", role: "Owner, Iron Republic Gym", text: "LuminaFit replaced our entire nutrition coaching workflow. Members love the AI plans." },
+  { name: "James Hartley", role: "Owner, Iron Republic Gym", text: "Athelya replaced our entire nutrition coaching workflow. Members love the AI plans." },
   { name: "Sarah Chen", role: "PT, FitLab London", text: "The multi-agent system catches things I'd miss. It's like having a second pair of expert eyes." },
-  { name: "Marcus Williams", role: "Head Coach, Apex Athletics", text: "We've seen 40% better member retention since integrating LuminaFit into our onboarding." },
+  { name: "Marcus Williams", role: "Head Coach, Apex Athletics", text: "We've seen 40% better member retention since integrating Athelya into our onboarding." },
   { name: "Dr. Emily Foster", role: "Sports Nutritionist", text: "The macro optimization is genuinely impressive. It accounts for nutrient timing perfectly." },
   { name: "Ryan O'Brien", role: "CrossFit Box Owner", text: "Setup took 10 minutes. Our athletes had personalized plans the same day." },
   { name: "Priya Sharma", role: "Wellness Director, GoldFit", text: "The verification reports give us confidence. Every plan is backed by data." },
@@ -40,7 +40,7 @@ export default function Landing() {
             <div className="w-6 h-6 rounded bg-white text-black flex items-center justify-center">
               <Activity size={16} />
             </div>
-            LuminaFit
+            Athelya
           </div>
           <div className="flex items-center gap-4">
             <Button variant="ghost" size="sm" onClick={() => navigate('/login')}>Log in</Button>
@@ -62,7 +62,7 @@ export default function Landing() {
         >
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-zinc-800 bg-zinc-900/50 text-sm text-zinc-300 mb-8">
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            LuminaFit AI Engine 2.0 is live
+            Athelya AI Engine 2.0 is live
           </div>
           
           <h1 className="text-5xl md:text-7xl font-semibold tracking-tighter leading-[1.1] mb-8">
@@ -98,13 +98,28 @@ export default function Landing() {
           />
           <FeatureCard 
             icon={<Activity />}
-            title="Dynamic Macro Balancing"
-            description="As your body changes, your plan adapts instantly. No more static PDFs."
+            title="Active Workout Coach"
+            description="Start workouts with an interactive UI featuring an AI 'Hype Trainer' and 'Biomechanics Coach'."
           />
           <FeatureCard 
             icon={<ShieldCheck />}
             title="Expert Verified"
             description="Every plan passes through an AI verification layer checking for allergies and contradictions."
+          />
+          <FeatureCard 
+            icon={<Mic />}
+            title="Hands-Free Voice Tracking"
+            description="Log sets, reps, and weight purely with your voice. The AI speaks back affirmations and form tips."
+          />
+          <FeatureCard 
+            icon={<Activity />}
+            title="AI Recipe Assistant"
+            description="Step-by-step cooking view with continuous hands-free voice mode and TTS reading."
+          />
+          <FeatureCard 
+            icon={<Database />}
+            title="Database Auto-Sync"
+            description="Your voice-logged workout data syncs seamlessly across the platform for real-time progress tracking."
           />
         </motion.div>
 
@@ -252,7 +267,7 @@ export default function Landing() {
                 <div className="w-6 h-6 rounded bg-white text-black flex items-center justify-center">
                   <Activity size={16} />
                 </div>
-                LuminaFit
+                Athelya
               </div>
               <p className="text-sm text-zinc-500 leading-relaxed">
                 AI-powered nutrition for the modern fitness industry.
@@ -294,7 +309,7 @@ export default function Landing() {
 
           {/* Bottom bar */}
           <div className="mt-12 pt-8 border-t border-zinc-900 flex flex-col md:flex-row items-center justify-between gap-4">
-            <p className="text-xs text-zinc-600">© {new Date().getFullYear()} LuminaFit. All rights reserved.</p>
+            <p className="text-xs text-zinc-600">© {new Date().getFullYear()} Athelya. All rights reserved.</p>
             <div className="flex items-center gap-4">
               <a href="#" className="text-zinc-600 hover:text-zinc-300 transition-colors text-sm">Twitter</a>
               <a href="#" className="text-zinc-600 hover:text-zinc-300 transition-colors text-sm">LinkedIn</a>

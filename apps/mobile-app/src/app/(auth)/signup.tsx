@@ -30,7 +30,7 @@ export default function Signup() {
 
     setLoading(true);
     try {
-      const res = await fetch('http://localhost:3000/api/v1/auth/signup', {
+      const res = await fetch('https://athelya-api.onrender.com/api/v1/auth/signup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, email, password })

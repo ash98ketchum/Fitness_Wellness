@@ -107,7 +107,7 @@ function speakText(text: string, onEnd?: () => void) {
   useEffect(() => {
     if (!id || !user || !token) return;
     
-    fetch(`http://localhost:3000/api/v1/meals/${id}`, {
+    fetch(`https://athelya-api.onrender.com/api/v1/meals/${id}`, {
       headers: {
         Authorization: `Bearer ${token}`
       }
@@ -134,7 +134,7 @@ function speakText(text: string, onEnd?: () => void) {
     }
 
     try {
-      const response = await fetch('http://localhost:3000/api/v1/agents/cooking', {
+      const response = await fetch('https://athelya-api.onrender.com/api/v1/agents/cooking', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

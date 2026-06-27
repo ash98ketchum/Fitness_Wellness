@@ -33,7 +33,7 @@ export default function Planner() {
   useEffect(() => {
     if (!user || !token) return;
     
-    fetch(`http://localhost:3000/api/v1/plans/latest?userId=${user.id}`, {
+    fetch(`https://athelya-api.onrender.com/api/v1/plans/latest?userId=${user.id}`, {
       headers: { 'Authorization': `Bearer ${token}` }
     })
       .then(res => res.ok ? res.json() : null)
@@ -67,8 +67,8 @@ export default function Planner() {
     try {
       const isPlaceholder = !meal.id || meal.id === 'bk' || meal.id === 'ln' || meal.id === 'sn' || meal.id === 'dn';
       const endpoint = isPlaceholder 
-        ? `http://localhost:3000/api/v1/plans/latest/meals/add`
-        : `http://localhost:3000/api/v1/meals/${meal.id}/regenerate`;
+        ? `https://athelya-api.onrender.com/api/v1/plans/latest/meals/add`
+        : `https://athelya-api.onrender.com/api/v1/meals/${meal.id}/regenerate`;
 
       const res = await fetch(endpoint, {
         method: 'POST',

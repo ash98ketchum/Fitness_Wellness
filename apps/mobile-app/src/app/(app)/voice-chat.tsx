@@ -129,7 +129,7 @@ export default function VoiceChat() {
     }
 
     try {
-      const res = await fetch(`http://localhost:3000/api/v1/chat/voice`, {
+      const res = await fetch(`https://athelya-api.onrender.com/api/v1/chat/voice`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,

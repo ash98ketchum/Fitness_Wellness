@@ -52,7 +52,7 @@ export default function Onboarding() {
         type: file.mimeType || 'application/pdf'
       } as any);
 
-      const res = await fetch(`http://localhost:3000/api/v1/onboarding/upload`, {
+      const res = await fetch(`https://athelya-api.onrender.com/api/v1/onboarding/upload`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}` },
         body: formData
@@ -86,7 +86,7 @@ export default function Onboarding() {
     } else {
       // Step 5 -> Submit metrics and route to loading
       try {
-        const res = await fetch(`http://localhost:3000/api/v1/onboarding`, {
+        const res = await fetch(`https://athelya-api.onrender.com/api/v1/onboarding`, {
           method: 'POST',
           headers: { 
             'Content-Type': 'application/json',

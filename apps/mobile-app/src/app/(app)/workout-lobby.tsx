@@ -19,7 +19,7 @@ export default function WorkoutLobby() {
 
   const fetchWorkout = async () => {
     try {
-      const res = await fetch(`http://localhost:3000/api/v1/workouts/today?userId=${user?.id}`, {
+      const res = await fetch(`https://athelya-api.onrender.com/api/v1/workouts/today?userId=${user?.id}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const data = await res.json();
@@ -36,7 +36,7 @@ export default function WorkoutLobby() {
   const generateWorkout = async () => {
     setGenerating(true);
     try {
-      const res = await fetch(`http://localhost:3000/api/v1/workouts/generate`, {
+      const res = await fetch(`https://athelya-api.onrender.com/api/v1/workouts/generate`, {
         method: 'POST',
         headers: { 
           'Authorization': `Bearer ${token}`,

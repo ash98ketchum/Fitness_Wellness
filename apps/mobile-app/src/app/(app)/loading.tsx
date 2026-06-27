@@ -33,7 +33,7 @@ export default function Loading() {
 
     const runPipeline = async () => {
       try {
-        const genRes = await fetch('http://localhost:3000/api/v1/plans/generate', {
+        const genRes = await fetch('https://athelya-api.onrender.com/api/v1/plans/generate', {
           method: 'POST',
           headers: { 
             'Content-Type': 'application/json',
@@ -46,7 +46,7 @@ export default function Loading() {
           // Now poll for completion
           const checkPlan = setInterval(async () => {
             try {
-              const res = await fetch(`http://localhost:3000/api/v1/plans/latest?userId=${user?.id}`, {
+              const res = await fetch(`https://athelya-api.onrender.com/api/v1/plans/latest?userId=${user?.id}`, {
                 headers: { 'Authorization': `Bearer ${token}` }
               });
               if (res.ok) {

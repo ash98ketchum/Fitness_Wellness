@@ -126,8 +126,8 @@ export default function ActiveWorkout() {
 
     try {
       const endpoint = chatMode === 'coach' 
-        ? 'http://localhost:3000/api/v1/workouts/coach-chat'
-        : 'http://localhost:3000/api/v1/workouts/trainer-chat'; // assuming you have this or will have this
+        ? 'https://athelya-api.onrender.com/api/v1/workouts/coach-chat'
+        : 'https://athelya-api.onrender.com/api/v1/workouts/trainer-chat'; // assuming you have this or will have this
       
       const res = await fetch(endpoint, {
         method: 'POST',
@@ -192,7 +192,7 @@ export default function ActiveWorkout() {
     try {
       if (!session) return;
       const currentEx = session.exercises[activeExerciseIndex];
-      await fetch('http://localhost:3000/api/v1/workouts/log-set', {
+      await fetch('https://athelya-api.onrender.com/api/v1/workouts/log-set', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({
@@ -211,7 +211,7 @@ export default function ActiveWorkout() {
     try {
       // In a real app, we'd have a specific endpoint for get session by id
       // Since we just built /api/v1/workouts/today, we can use that to grab the active one
-      const res = await fetch(`http://localhost:3000/api/v1/workouts/today?userId=${user?.id}`, {
+      const res = await fetch(`https://athelya-api.onrender.com/api/v1/workouts/today?userId=${user?.id}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const data = await res.json();
@@ -306,7 +306,7 @@ export default function ActiveWorkout() {
           speakText(affirmation, undefined, true);
           
           // Background AI Coaching Call
-          fetch(`http://localhost:3000/api/v1/chat/voice`, {
+          fetch(`https://athelya-api.onrender.com/api/v1/chat/voice`, {
              method: 'POST',
              headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
              body: JSON.stringify({ text: `[WORKOUT EVENT] I just finished ${reps} reps at ${weight}kg of ${currentEx.exercise.name}. Give me a short 1-sentence motivation, form tip, or reminder to drink water.` })
@@ -339,7 +339,7 @@ export default function ActiveWorkout() {
     // 4. Fallback to AI conversational query
     if (!loggedSomething) {
       try {
-        const res = await fetch(`http://localhost:3000/api/v1/chat/voice`, {
+        const res = await fetch(`https://athelya-api.onrender.com/api/v1/chat/voice`, {
           method: 'POST',
           headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({ text: command })

@@ -21,7 +21,7 @@ export default function ExpertReport() {
   useEffect(() => {
     if (!user || !token) return;
 
-    fetch(`http://localhost:3000/api/v1/plans/latest?userId=${user.id}`, {
+    fetch(`https://athelya-api.onrender.com/api/v1/plans/latest?userId=${user.id}`, {
       headers: { 'Authorization': `Bearer ${token}` }
     })
       .then(res => res.ok ? res.json() : null)

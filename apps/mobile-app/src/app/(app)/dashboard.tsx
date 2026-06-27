@@ -33,7 +33,7 @@ export default function Dashboard() {
   useEffect(() => {
     if (!user || !token) return;
     
-    fetch(`http://localhost:3000/api/v1/dashboard`, {
+    fetch(`https://athelya-api.onrender.com/api/v1/dashboard`, {
       headers: { 'Authorization': `Bearer ${token}` }
     })
       .then(res => res.ok ? res.json() : null)
@@ -57,7 +57,7 @@ export default function Dashboard() {
 
   const handleSkip = async (reason: string) => {
     try {
-      await fetch(`http://localhost:3000/api/v1/events/log`, {
+      await fetch(`https://athelya-api.onrender.com/api/v1/events/log`, {
         method: 'POST',
         headers: { 
           'Authorization': `Bearer ${token}`,

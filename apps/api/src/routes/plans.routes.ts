@@ -89,7 +89,7 @@ router.get('/latest', authMiddleware, async (req: AuthRequest, res: Response) =>
     const plan = await prisma.dietPlan.findFirst({
       where: { userId, status: 'READY' },
       orderBy: { createdAt: 'desc' },
-      include: { meals: { orderBy: { createdAt: 'asc' } }, report: true },
+      include: { meals: { orderBy: { createdAt: 'asc' } }, verificationReport: true },
     });
 
     if (!plan) {

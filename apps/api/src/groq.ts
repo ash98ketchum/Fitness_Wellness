@@ -24,6 +24,17 @@ function getGroqClient(): Groq {
   return new Groq({ apiKey: selectedKey });
 }
 
+export async function transcribeAudio(filePath: string): Promise<string> {
+  const fs = require('fs');
+  const groq = getGroqClient();
+  const transcription = await groq.audio.transcriptions.create({
+    file: fs.createReadStream(filePath),
+    model: "distil-whisper-large-v3-en",
+    response_format: "json",
+  });
+  return transcription.text;
+}
+
 interface OnboardingData {
   age?: string;
   gender?: string;

@@ -128,11 +128,18 @@ cd apps/web
 npx playwright test
 ```
 *Screenshots of the run are automatically captured in `apps/web/tests/screenshots/`.*
-5. put server on cloud
 
-7. streaks
-name - Areyon - Excellence in life/ Living at your highest potential
-   Athelya - Athos - Atheltic, Aya - Progress 
-   Kalyptis - kalos - beautiful, excellence + upati -> maintanance
-   Noble maintanance
-   
+
+Jivence persistence of constant vitality
+gaps
+ui
+admin logins/dashboard
+original - 15.99
+pure gym 9.99(subscription) - 0.99(gym)
+2.5 M
+3000/gym 
+montly gym avg - 20
+expected users -> 
+coupons 
+
+

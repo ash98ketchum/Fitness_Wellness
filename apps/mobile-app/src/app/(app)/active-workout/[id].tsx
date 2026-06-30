@@ -158,7 +158,7 @@ export default function ActiveWorkout() {
   }, [id]);
 
   useEffect(() => {
-    let interval: NodeJS.Timeout;
+    let interval: ReturnType<typeof setInterval>;
     if (restTimer !== null && restTimer > 0) {
       interval = setInterval(() => {
         setRestTimer(prev => (prev ? prev - 1 : 0));

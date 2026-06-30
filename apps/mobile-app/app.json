@@ -17,7 +17,8 @@
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.athelya.mobileapp"
     },
     "web": {
       "output": "static",
@@ -35,11 +36,18 @@
           }
         }
       ],
-      "expo-video"
+      "expo-video",
+      "expo-audio"
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "0841a5e0-80f9-49fb-ac8e-35fcd15cd89b"
+      }
     }
   }
 }

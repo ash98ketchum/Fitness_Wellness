@@ -1,19 +1,36 @@
 import { Router, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { authMiddleware, AuthRequest } from '../middleware/auth';
-import { chatWithDietician, chatWithCookingAssistant } from '../groq';
+import { upload } from '../middleware/upload';
+import { chatWithDietician, chatWithCookingAssistant, transcribeAudio } from '../groq';
 import { buildAgentContext } from '../agent-context';
 import { AIGateway } from '../ai-gateway';
 import { MasterCoach } from '../master-coach';
+import fs from 'fs';
 
 const router = Router();
 const prisma = new PrismaClient();
 
 // ─── Chatbot (Dietician) ──────────────────────
-router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
+router.post('/', authMiddleware, upload.single('audio'), async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.userId!;
-    const { messages } = req.body;
+    let messages: any[] = [];
+    let transcribedText: string | undefined;
+    
+    if (req.file) {
+      // Audio uploaded via multipart/form-data
+      transcribedText = await transcribeAudio(req.file.path);
+      fs.unlinkSync(req.file.path); // Clean up
+      
+      if (req.body.messages) {
+        try { messages = JSON.parse(req.body.messages); } catch(e) {}
+      }
+      messages.push({ role: 'user', content: transcribedText });
+    } else {
+      // Standard JSON
+      messages = req.body.messages;
+    }
 
     if (!messages || !Array.isArray(messages)) {
       res.status(400).json({ error: 'Messages array is required' });
@@ -148,58 +165,11 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
       })();
     }
 
-    res.json({ reply: aiRes.reply });
+    res.json({ reply: aiRes.reply, transcribedText });
   } catch (err) {
     console.error('Chat error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
-
-// ─── Voice Chat / Walkie-Talkie ───────────────
-router.post('/voice', authMiddleware, async (req: AuthRequest, res: Response) => {
-  try {
-    const userId = req.userId!;
-    const { text } = req.body;
-
-    if (!text) {
-      res.status(400).json({ error: 'Text input required' });
-      return;
-    }
-
-    // Context
-    const contextStr = await buildAgentContext(userId);
-
-    // AI Response
-    const aiResponse = await AIGateway.generateJson<{
-      response: string;
-      shouldTriggerEvent: boolean;
-      detectedEventType?: string;
-      detectedEventData?: any;
-    }>({
-      messages: [
-        {
-          role: 'system',
-          content: `You are Athelya, a voice-first health AI OS. Respond concisely and conversationally like a real coach. You can also detect if the user's message constitutes an 'event' (e.g., 'I ate a pizza', 'I skipped my workout'). Return your response in JSON format.`
-        },
-        {
-          role: 'user',
-          content: `Context:\n${contextStr}\n\nUser Message (Voice Transcribed):\n"${text}"`
-        }
-      ]
-    });
-
-    // If the AI detects an event from the natural language, feed it to MasterCoach
-    if (aiResponse.shouldTriggerEvent && aiResponse.detectedEventType) {
-      MasterCoach.evaluateEvent(userId, aiResponse.detectedEventType, aiResponse.detectedEventData || {}).catch(e => console.error('[Voice Chat] Event Error:', e));
-    }
-
-    res.json({ success: true, text: aiResponse.response, eventTriggered: aiResponse.shouldTriggerEvent });
-  } catch (err) {
-    console.error('Voice chat error:', err);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-
 
 export default router;

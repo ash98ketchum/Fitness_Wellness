@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router';
 import { useAuth } from '../../contexts/AuthContext';
 import { Mic, MicOff, ArrowUp, ArrowLeft, Volume2, MessageSquare, Headphones } from 'lucide-react-native';
 import { StatusBar } from 'expo-status-bar';
+import { useAudioRecorder, RecordingPresets, requestRecordingPermissionsAsync } from 'expo-audio';
 
 // ──────────────────────────────────────────────────
 // Web Speech API helper (works in Chrome/Edge)
@@ -57,62 +58,113 @@ export default function VoiceChat() {
     isProcessingRef.current = isProcessing;
   }, [isVoiceMode, isProcessing]);
 
-  const startListening = useCallback(() => {
-    if (recognitionRef.current) {
-      try { recognitionRef.current.abort(); } catch (_) {}
+  const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
+
+  const startListening = useCallback(async () => {
+    if (Platform.OS === 'web') {
+      const SpeechRecognitionClass = getWebSpeechRecognition();
+      if (!SpeechRecognitionClass) {
+        if (isVoiceModeRef.current) setIsVoiceMode(false);
+        return;
+      }
+      const recognition = new SpeechRecognitionClass();
+      recognition.lang = 'en-US';
+      recognition.onstart = () => setIsListening(true);
+      recognition.onresult = (event: any) => {
+        const transcript = Array.from(event.results)
+          .map((res: any) => res[0].transcript)
+          .join('');
+        if (event.results[0].isFinal) {
+          setInputText('');
+          setIsListening(false);
+          sendMessage(transcript);
+        }
+      };
+      recognition.onend = () => setIsListening(false);
+      recognitionRef.current = recognition;
+      try { recognition.start(); } catch (e) {}
+    } else {
+      const perm = await requestRecordingPermissionsAsync();
+      if (!perm.granted) {
+        if (isVoiceModeRef.current) setIsVoiceMode(false);
+        return;
+      }
+      setIsListening(true);
+      try {
+        await recorder.prepareToRecordAsync();
+        recorder.record();
+      } catch (e) {
+        console.error('Failed to start recording', e);
+        setIsListening(false);
+      }
     }
+  }, [recorder]);
 
-    const SpeechRecognitionClass = getWebSpeechRecognition();
-    if (!SpeechRecognitionClass) {
-      if (isVoiceModeRef.current) setIsVoiceMode(false);
-      return;
-    }
-
-    const recognition = new SpeechRecognitionClass();
-    recognition.lang = 'en-US';
-    recognition.interimResults = true;
-    recognition.continuous = false;
-    recognition.maxAlternatives = 1;
-
-    recognition.onstart = () => setIsListening(true);
-
-    recognition.onresult = (event: any) => {
-      let finalTranscript = '';
-      let interimTranscript = '';
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        const transcript = event.results[i][0].transcript;
-        if (event.results[i].isFinal) {
-          finalTranscript += transcript;
-        } else {
-          interimTranscript += transcript;
+  const stopListening = useCallback(async () => {
+    if (Platform.OS === 'web') {
+      if (recognitionRef.current) {
+        try { recognitionRef.current.stop(); } catch (_) {}
+      }
+    } else {
+      setIsListening(false);
+      if (recorder.isRecording) {
+        await recorder.stop();
+        if (recorder.uri) {
+          await sendAudioMessage(recorder.uri);
         }
       }
-      if (interimTranscript) setInputText(interimTranscript);
-      if (finalTranscript) {
-        setInputText('');
-        setIsListening(false);
-        sendMessage(finalTranscript);
+    }
+  }, [recorder]);
+
+  const sendAudioMessage = async (audioUri: string) => {
+    if (!user || !token) return;
+    setIsProcessing(true);
+    isProcessingRef.current = true;
+    
+    // Optimistic UI update
+    setMessages(prev => [...prev, { role: 'user', text: '(Voice Message)' }]);
+
+    try {
+      const formData = new FormData();
+      formData.append('audio', {
+        uri: audioUri,
+        name: 'audio.m4a',
+        type: 'audio/m4a'
+      } as any);
+
+      // We no longer use /chat/voice, we use the unified /chat endpoint
+      const res = await fetch(`https://athelya-api.onrender.com/api/v1/chat`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        body: formData
+      });
+      const data = await res.json();
+
+      setMessages(prev => {
+        const newMsgs = [...prev];
+        if (data.transcribedText) {
+          newMsgs[newMsgs.length - 1].text = data.transcribedText;
+        }
+        newMsgs.push({ role: 'ai', text: data.reply });
+        return newMsgs;
+      });
+
+      if (ttsEnabled) {
+        speakText(data.reply, () => {
+          if (isVoiceModeRef.current) startListening();
+        });
+      } else {
+        if (isVoiceModeRef.current) startListening();
       }
-    };
+    } catch (err) {
+      console.error('Audio upload error:', err);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
 
-    recognition.onerror = (event: any) => {
-      console.error('Speech recognition error', event.error);
-      setIsListening(false);
-    };
-
-    recognition.onend = () => {
-      setIsListening(false);
-      // Auto-restart if in voice mode and we are not currently processing a request
-      if (isVoiceModeRef.current && !isProcessingRef.current) {
-        startListening();
-      }
-    };
-
-    recognitionRef.current = recognition;
-    try { recognition.start(); } catch (e) {}
-  }, []);
-
-  // ── Send a chat message ─────────────────────────
   const sendMessage = useCallback(async (overrideText?: string) => {
     const msgText = (overrideText || inputText).trim();
     if (!msgText || !user || !token) return;
@@ -120,8 +172,6 @@ export default function VoiceChat() {
     setInputText('');
     setMessages(prev => [...prev, { role: 'user', text: msgText }]);
     setIsProcessing(true);
-    
-    // Explicitly update processing ref for onend callback
     isProcessingRef.current = true;
 
     if (recognitionRef.current) {
@@ -129,13 +179,15 @@ export default function VoiceChat() {
     }
 
     try {
-      const res = await fetch(`https://athelya-api.onrender.com/api/v1/chat/voice`, {
+      const res = await fetch(`https://athelya-api.onrender.com/api/v1/chat`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ text: msgText })
+        body: JSON.stringify({
+           messages: [{ role: 'user', content: msgText }]
+        })
       });
 
       const data = await res.json();
@@ -188,10 +240,7 @@ export default function VoiceChat() {
       startListening();
     } else {
       // End voice mode
-      if (recognitionRef.current) {
-        try { recognitionRef.current.stop(); } catch (_) {}
-      }
-      setIsListening(false);
+      stopListening();
       if (Platform.OS === 'web' && typeof window !== 'undefined') {
         window.speechSynthesis?.cancel();
       }
@@ -269,7 +318,7 @@ export default function VoiceChat() {
         <View className="px-4 pb-2">
           <View className="flex-row items-center justify-center gap-2 bg-red-500/10 border border-red-500/30 rounded-2xl py-3 px-4">
             <View className="w-3 h-3 rounded-full bg-red-500" />
-            <Text className="text-red-400 text-sm font-medium">Listening… speak now</Text>
+            <Text className="text-red-400 text-sm font-medium">Listening… {Platform.OS !== 'web' ? 'Tap Mic to Send' : 'Speak now'}</Text>
           </View>
         </View>
       )}
@@ -300,9 +349,11 @@ export default function VoiceChat() {
               className={`w-10 h-10 rounded-full items-center justify-center ${isVoiceMode ? 'bg-blue-600' : (isListening ? 'bg-red-600' : 'bg-zinc-800')}`}
               onPress={() => {
                 if (!isVoiceMode) {
-                  // Fallback for manual click if not in voice mode
-                  setIsListening(true);
-                  startListening();
+                  if (isListening) {
+                    stopListening();
+                  } else {
+                    startListening();
+                  }
                 } else {
                   toggleVoiceMode();
                 }
